@@ -134,7 +134,7 @@
         decodedRequestEl.textContent = decodeJWT(jwt);
 
         // Send as plain text to localhost
-        const res = await fetch(`http://localhost:8080${path}`, {
+        const res = await fetch(`http://localhost:8080${path}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: jwt
