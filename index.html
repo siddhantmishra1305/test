@@ -18,6 +18,7 @@
     }
     button { padding: 10px 20px; margin-top: 10px; }
     nav button { margin-right: 10px; }
+    #ssoProxyForm { display: none; }
   </style>
 </head>
 <body>
@@ -83,6 +84,11 @@
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
+  <!-- Hidden form for SSO‐triggering POST -->
+  <form id="ssoProxyForm" method="POST">
+    <input type="hidden" name="jwt" id="ssoJwtInput">
+  </form>
+
   <script>
     function switchView(view) {
       document.querySelectorAll('.view').forEach(div => div.classList.remove('active'));
@@ -99,58 +105,63 @@
     function decodeJWT(jwt) {
       const parts = jwt.split('.');
       if (parts.length < 2) return "Invalid JWT";
-      const [header, payload] = parts;
       try {
-        const decodedHeader = JSON.parse(atob(header.replace(/-/g, '+').replace(/_/g, '/')));
-        const decodedPayload = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-        return JSON.stringify({ header: decodedHeader, payload: decodedPayload }, null, 2);
+        const header  = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return JSON.stringify({ header, payload }, null, 2);
       } catch {
         return "Failed to decode JWT";
       }
     }
 
-    async function sendJWT(type) {
-      const prefix = type === 'registration' ? 'reg' : 'auth';
+    // If the extension or your local service redirects back here with
+    // ?token=...&type=registration (or authentication), decode & show it
+    function populateResponseFromURL() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const type  = params.get('type'); // "registration" or "authentication"
+      if (!token || !type) return;
 
+      const prefix = type === 'authentication' ? 'auth' : 'reg';
+      document.getElementById(`${prefix}ResponseString`).textContent = token;
+      const decodedEl = document.getElementById(`${prefix}DecodedResponse`);
+      decodedEl.textContent = decodeJWT(token);
+      decodedEl.style.backgroundColor = '#d4edda';
+      switchView(type);
+    }
+
+    window.addEventListener('DOMContentLoaded', populateResponseFromURL);
+
+    function sendJWT(type) {
+      const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerInput = document.getElementById(`${prefix}Header`);
-      const bodyInput = document.getElementById(`${prefix}Body`);
-      const requestStringEl = document.getElementById(`${prefix}RequestString`);
-      const decodedRequestEl = document.getElementById(`${prefix}DecodedRequest`);
-      const responseStringEl = document.getElementById(`${prefix}ResponseString`);
-      const decodedResponseEl = document.getElementById(`${prefix}DecodedResponse`);
-      const path = document.getElementById(`${prefix}Path`).value;
+      const bodyInput   = document.getElementById(`${prefix}Body`);
+      const requestEl   = document.getElementById(`${prefix}RequestString`);
+      const decodedEl   = document.getElementById(`${prefix}DecodedRequest`);
+      const path        = document.getElementById(`${prefix}Path`).value;
 
       try {
         const headerJSON = JSON.parse(headerInput.value);
-        const bodyJSON = JSON.parse(bodyInput.value);
+        const bodyJSON   = JSON.parse(bodyInput.value);
 
         const encodedHeader = base64url(JSON.stringify(headerJSON));
-        const encodedBody = base64url(JSON.stringify(bodyJSON));
-        const signature = base64url('dummy-signature');
-        const jwt = `${encodedHeader}.${encodedBody}.${signature}`;
+        const encodedBody   = base64url(JSON.stringify(bodyJSON));
+        const signature     = base64url('dummy-signature');
+        const jwt           = `${encodedHeader}.${encodedBody}.${signature}`;
 
-        // Show request
-        requestStringEl.textContent = jwt;
-        decodedRequestEl.textContent = decodeJWT(jwt);
+        // Show on‐page request
+        requestEl.textContent = jwt;
+        decodedEl.textContent = decodeJWT(jwt);
 
-        // Send as plain text to localhost
-        const res = await fetch(`https://new.auth.platformsso.ping-eng.com/${path}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: jwt
-        });
+        // Prepare & submit the hidden form — this triggers Safari’s SSO extension
+        const form  = document.getElementById('ssoProxyForm');
+        form.action = `https://new.auth.platformsso.ping-eng.com${path}`;
+        document.getElementById('ssoJwtInput').value = jwt;
+        form.submit();
 
-        const responseJWT = await res.text();
-
-        responseStringEl.textContent = responseJWT;
-        decodedResponseEl.textContent = decodeJWT(responseJWT);
-        decodedResponseEl.style.backgroundColor = res.ok ? "#d4edda" : "#f8d7da"; // green / red
       } catch (e) {
-        requestStringEl.textContent = "Error: " + e.message;
-        decodedRequestEl.textContent = "";
-        responseStringEl.textContent = "";
-        decodedResponseEl.textContent = "Error: " + e.message;
-        decodedResponseEl.style.backgroundColor = "#f8d7da"; // red
+        requestEl.textContent = "Error: " + e.message;
+        decodedEl.textContent = "";
       }
     }
   </script>
