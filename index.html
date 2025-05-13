@@ -31,56 +31,40 @@
   <!-- Registration View -->
   <div id="registration" class="view active">
     <h2>Registration</h2>
-
     <label>Header (JSON):</label>
     <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-
     <label>Body (JSON):</label>
     <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
-
     <label>Request JWT String:</label>
     <pre id="regRequestString">...</pre>
-
     <label>Decoded Request JWT:</label>
     <pre id="regDecodedRequest">...</pre>
-
     <label>Response JWT String:</label>
     <pre id="regResponseString">...</pre>
-
     <label>Decoded Response JWT:</label>
     <pre id="regDecodedResponse">...</pre>
-
     <label>Path:</label>
     <input type="text" id="regPath" value="/register" />
-
     <button onclick="sendJWT('registration')">Send Registration</button>
   </div>
 
   <!-- Authentication View -->
   <div id="authentication" class="view">
     <h2>Authentication</h2>
-
     <label>Header (JSON):</label>
     <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-
     <label>Body (JSON):</label>
     <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
-
     <label>Request JWT String:</label>
     <pre id="authRequestString">...</pre>
-
     <label>Decoded Request JWT:</label>
     <pre id="authDecodedRequest">...</pre>
-
     <label>Response JWT String:</label>
     <pre id="authResponseString">...</pre>
-
     <label>Decoded Response JWT:</label>
     <pre id="authDecodedResponse">...</pre>
-
     <label>Path:</label>
     <input type="text" id="authPath" value="/authenticate" />
-
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
@@ -114,54 +98,75 @@
       }
     }
 
-    // If the extension or your local service redirects back here with
-    // ?token=...&type=registration (or authentication), decode & show it
+    // Detect Safari (incl. iOS Safari); exclude Chrome, Edge etc.
+    function isSafari() {
+      const ua = navigator.userAgent;
+      return /^((?!chrome|android).)*safari/i.test(ua);
+    }
+
+    // Populate response for SSO‐redirect callback
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
-      const type  = params.get('type'); // "registration" or "authentication"
+      const type  = params.get('type');
       if (!token || !type) return;
-
       const prefix = type === 'authentication' ? 'auth' : 'reg';
       document.getElementById(`${prefix}ResponseString`).textContent = token;
-      const decodedEl = document.getElementById(`${prefix}DecodedResponse`);
-      decodedEl.textContent = decodeJWT(token);
-      decodedEl.style.backgroundColor = '#d4edda';
+      const dec = document.getElementById(`${prefix}DecodedResponse`);
+      dec.textContent = decodeJWT(token);
+      dec.style.backgroundColor = '#d4edda';
       switchView(type);
     }
-
     window.addEventListener('DOMContentLoaded', populateResponseFromURL);
 
-    function sendJWT(type) {
+    async function sendJWT(type) {
+      const isSSO = isSafari();
       const prefix = type === 'registration' ? 'reg' : 'auth';
-      const headerInput = document.getElementById(`${prefix}Header`);
-      const bodyInput   = document.getElementById(`${prefix}Body`);
-      const requestEl   = document.getElementById(`${prefix}RequestString`);
-      const decodedEl   = document.getElementById(`${prefix}DecodedRequest`);
-      const path        = document.getElementById(`${prefix}Path`).value;
+      const headerEl = document.getElementById(`${prefix}Header`);
+      const bodyEl   = document.getElementById(`${prefix}Body`);
+      const reqEl    = document.getElementById(`${prefix}RequestString`);
+      const decReqEl = document.getElementById(`${prefix}DecodedRequest`);
+      const resEl    = document.getElementById(`${prefix}ResponseString`);
+      const decResEl = document.getElementById(`${prefix}DecodedResponse`);
+      const path     = document.getElementById(`${prefix}Path`).value;
 
       try {
-        const headerJSON = JSON.parse(headerInput.value);
-        const bodyJSON   = JSON.parse(bodyInput.value);
+        const headerJSON = JSON.parse(headerEl.value);
+        const bodyJSON   = JSON.parse(bodyEl.value);
+        const jwt = [
+          base64url(JSON.stringify(headerJSON)),
+          base64url(JSON.stringify(bodyJSON)),
+          base64url('dummy-signature')
+        ].join('.');
 
-        const encodedHeader = base64url(JSON.stringify(headerJSON));
-        const encodedBody   = base64url(JSON.stringify(bodyJSON));
-        const signature     = base64url('dummy-signature');
-        const jwt           = `${encodedHeader}.${encodedBody}.${signature}`;
+        // Show request on page
+        reqEl.textContent = jwt;
+        decReqEl.textContent = decodeJWT(jwt);
 
-        // Show on‐page request
-        requestEl.textContent = jwt;
-        decodedEl.textContent = decodeJWT(jwt);
-
-        // Prepare & submit the hidden form — this triggers Safari’s SSO extension
-        const form  = document.getElementById('ssoProxyForm');
-        form.action = `https://new.auth.platformsso.ping-eng.com${path}`;
-        document.getElementById('ssoJwtInput').value = jwt;
-        form.submit();
-
+        if (isSSO) {
+          // Safari: use hidden form POST to SSO endpoint
+          const form = document.getElementById('ssoProxyForm');
+          form.action = `https://new.auth.platformsso.ping-eng.com${path}?type=${type}`;
+          document.getElementById('ssoJwtInput').value = jwt;
+          form.submit();
+        } else {
+          // Other browsers: loopback POST
+          const response = await fetch(`http://localhost:8080${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: jwt
+          });
+          const text = await response.text();
+          resEl.textContent = text;
+          decResEl.textContent = decodeJWT(text);
+          decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+        }
       } catch (e) {
-        requestEl.textContent = "Error: " + e.message;
-        decodedEl.textContent = "";
+        reqEl.textContent = "Error: " + e.message;
+        decReqEl.textContent = "";
+        resEl.textContent = "";
+        decResEl.textContent = "Error: " + e.message;
+        decResEl.style.backgroundColor = '#f8d7da';
       }
     }
   </script>
