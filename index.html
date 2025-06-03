@@ -1,14 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>JWT Registration & Authentication</title>
+  <meta charset="UTF-8" />
+  <title>JWT Registration &amp; Authentication</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    .view { display: none; }
-    .active { display: block; }
-    textarea, input { width: 100%; margin: 10px 0; }
-    textarea { height: 100px; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .view {
+      display: none;
+    }
+    .active {
+      display: block;
+    }
+    textarea,
+    input {
+      width: 100%;
+      margin: 10px 0;
+    }
+    textarea {
+      height: 100px;
+    }
     pre {
       background: #eee;
       padding: 10px;
@@ -16,17 +29,43 @@
       word-wrap: break-word;
       border-radius: 5px;
     }
-    button { padding: 10px 20px; margin-top: 10px; }
-    nav button { margin-right: 10px; }
-    #ssoProxyForm { display: none; }
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+    }
+    nav button {
+      margin-right: 10px;
+    }
+    #ssoProxyForm {
+      display: none;
+    }
+    .force-sso-container {
+      margin: 15px 0;
+    }
+    .force-sso-container label {
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .force-sso-container input[type="checkbox"] {
+      margin-right: 5px;
+      transform: scale(1.1);
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
-
   <nav>
     <button onclick="switchView('registration')">Registration</button>
     <button onclick="switchView('authentication')">Authentication</button>
   </nav>
+
+  <!-- Force SSO Checkbox (visible regardless of view) -->
+  <div class="force-sso-container">
+    <label>
+      <input type="checkbox" id="forceSSO" />
+      Force SSO (use extension URL even if not Safari)
+    </label>
+  </div>
 
   <!-- Registration View -->
   <div id="registration" class="view active">
@@ -70,12 +109,14 @@
 
   <!-- Hidden form for SSO‐triggering POST -->
   <form id="ssoProxyForm" method="POST">
-    <input type="hidden" name="jwt" id="ssoJwtInput">
+    <input type="hidden" name="jwt" id="ssoJwtInput" />
   </form>
 
   <script>
     function switchView(view) {
-      document.querySelectorAll('.view').forEach(div => div.classList.remove('active'));
+      document.querySelectorAll('.view').forEach((div) =>
+        div.classList.remove('active')
+      );
       document.getElementById(view).classList.add('active');
     }
 
@@ -88,13 +129,17 @@
 
     function decodeJWT(jwt) {
       const parts = jwt.split('.');
-      if (parts.length < 2) return "Invalid JWT";
+      if (parts.length < 2) return 'Invalid JWT';
       try {
-        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const header = JSON.parse(
+          atob(parts[0].replace(/-/g, '+').replace(/_/g, '/'))
+        );
+        const payload = JSON.parse(
+          atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+        );
         return JSON.stringify({ header, payload }, null, 2);
       } catch {
-        return "Failed to decode JWT";
+        return 'Failed to decode JWT';
       }
     }
 
@@ -107,17 +152,17 @@
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
-      const type  = params.get('type');
+      const type = params.get('type');
       if (!token || !type) return;
 
       let decoded;
       try {
         decoded = decodeJWT(token);
       } catch {
-        decoded = "Invalid JWT received";
+        decoded = 'Invalid JWT received';
       }
 
-      const success = !decoded.includes("Invalid") && !decoded.includes("Failed");
+      const success = !decoded.includes('Invalid') && !decoded.includes('Failed');
 
       document.body.innerHTML = `
         <div style="
@@ -137,45 +182,57 @@
             border-radius: 5px;
             white-space: pre-wrap;
           ">${decoded}</pre>
-          <a href="/" style="display: inline-block; margin-top: 20px; color: #007bff;">← Back to App</a>
+          <a href="/" style="display: inline-block; margin-top: 20px; color: #007bff;">
+            ← Back to App
+          </a>
         </div>
       `;
     }
     window.addEventListener('DOMContentLoaded', populateResponseFromURL);
 
     async function sendJWT(type) {
-      const isSSO = isSafari();
+      // 1) Check the "Force SSO" checkbox
+      const forceSSO = document.getElementById('forceSSO').checked;
+      // 2) Detect Safari
+      const isBrowserSafari = isSafari();
+      // 3) Override: if either Safari OR the checkbox is ON, treat as SSO
+      const isSSO = isBrowserSafari || forceSSO;
+
       const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerEl = document.getElementById(`${prefix}Header`);
-      const bodyEl   = document.getElementById(`${prefix}Body`);
-      const reqEl    = document.getElementById(`${prefix}RequestString`);
+      const bodyEl = document.getElementById(`${prefix}Body`);
+      const reqEl = document.getElementById(`${prefix}RequestString`);
       const decReqEl = document.getElementById(`${prefix}DecodedRequest`);
-      const resEl    = document.getElementById(`${prefix}ResponseString`);
+      const resEl = document.getElementById(`${prefix}ResponseString`);
       const decResEl = document.getElementById(`${prefix}DecodedResponse`);
-      const path     = document.getElementById(`${prefix}Path`).value;
+      const path = document.getElementById(`${prefix}Path`).value;
 
       try {
         const headerJSON = JSON.parse(headerEl.value);
-        const bodyJSON   = JSON.parse(bodyEl.value);
+        const bodyJSON = JSON.parse(bodyEl.value);
+        // Build a dummy JWT (header.payload.signature)
         const jwt = [
           base64url(JSON.stringify(headerJSON)),
           base64url(JSON.stringify(bodyJSON)),
-          base64url('dummy-signature')
+          base64url('dummy-signature'),
         ].join('.');
 
+        // Show the request JWT
         reqEl.textContent = jwt;
         decReqEl.textContent = decodeJWT(jwt);
 
         if (isSSO) {
+          // If forcing SSO or running Safari, POST via the hidden form
           const form = document.getElementById('ssoProxyForm');
           form.action = `https://new.auth.platformsso.ping-eng.com${path}?type=${type}`;
           document.getElementById('ssoJwtInput').value = jwt;
           form.submit();
         } else {
+          // Otherwise, do the normal fetch() to your local server
           const response = await fetch(`http://localhost:8080${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
-            body: jwt
+            body: jwt,
           });
           const text = await response.text();
           resEl.textContent = text;
@@ -183,10 +240,10 @@
           decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
         }
       } catch (e) {
-        reqEl.textContent = "Error: " + e.message;
-        decReqEl.textContent = "";
-        resEl.textContent = "";
-        decResEl.textContent = "Error: " + e.message;
+        reqEl.textContent = 'Error: ' + e.message;
+        decReqEl.textContent = '';
+        resEl.textContent = '';
+        decResEl.textContent = 'Error: ' + e.message;
         decResEl.style.backgroundColor = '#f8d7da';
       }
     }
