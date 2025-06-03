@@ -59,7 +59,7 @@
     <button onclick="switchView('authentication')">Authentication</button>
   </nav>
 
-  <!-- Force SSO Checkbox (visible regardless of view) -->
+  <!-- Force SSO Checkbox (visible on both views) -->
   <div class="force-sso-container">
     <label>
       <input type="checkbox" id="forceSSO" />
@@ -107,7 +107,7 @@
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
-  <!-- Hidden form for SSO‐triggering POST -->
+  <!-- Hidden form for Safari‐style SSO POST -->
   <form id="ssoProxyForm" method="POST">
     <input type="hidden" name="jwt" id="ssoJwtInput" />
   </form>
@@ -148,7 +148,7 @@
       return /^((?!chrome|android).)*safari/i.test(ua);
     }
 
-    // Safari SSO callback response page
+    // If Safari‐style SSO callback, show a simple success/failure page
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
@@ -162,7 +162,9 @@
         decoded = 'Invalid JWT received';
       }
 
-      const success = !decoded.includes('Invalid') && !decoded.includes('Failed');
+      const success =
+        decoded.indexOf('Invalid') === -1 &&
+        decoded.indexOf('Failed') === -1;
 
       document.body.innerHTML = `
         <div style="
@@ -191,11 +193,11 @@
     window.addEventListener('DOMContentLoaded', populateResponseFromURL);
 
     async function sendJWT(type) {
-      // 1) Check the "Force SSO" checkbox
+      // 1) Read the "Force SSO" checkbox:
       const forceSSO = document.getElementById('forceSSO').checked;
-      // 2) Detect Safari
+      // 2) Detect if this is truly Safari:
       const isBrowserSafari = isSafari();
-      // 3) Override: if either Safari OR the checkbox is ON, treat as SSO
+      // 3) Combine them: if Safari OR forced, do SSO flow.
       const isSSO = isBrowserSafari || forceSSO;
 
       const prefix = type === 'registration' ? 'reg' : 'auth';
@@ -217,18 +219,29 @@
           base64url('dummy-signature'),
         ].join('.');
 
-        // Show the request JWT
+        // Display the request JWT box:
         reqEl.textContent = jwt;
         decReqEl.textContent = decodeJWT(jwt);
 
         if (isSSO) {
-          // If forcing SSO or running Safari, POST via the hidden form
-          const form = document.getElementById('ssoProxyForm');
-          form.action = `https://new.auth.platformsso.ping-eng.com${path}?type=${type}`;
-          document.getElementById('ssoJwtInput').value = jwt;
-          form.submit();
+          // --- SSO FLOW ---
+          // If Safari, do a POST form. Otherwise (Chrome/Firefox), do a GET with JWT in the URL:
+          const baseSSOUrl = `https://new.auth.platformsso.ping-eng.com${path}?type=${type}`;
+
+          if (isBrowserSafari) {
+            // Safari: submit via hidden form (POST)
+            const form = document.getElementById('ssoProxyForm');
+            form.action = baseSSOUrl;
+            document.getElementById('ssoJwtInput').value = jwt;
+            form.submit();
+          } else {
+            // Chrome (or any non‐Safari) → send JWT as a query parameter
+            // Encoding the JWT is important (URL‐encode all “.”, “=” etc.)
+            const redirectURL = `${baseSSOUrl}&jwt=${encodeURIComponent(jwt)}`;
+            window.location.href = redirectURL;
+          }
         } else {
-          // Otherwise, do the normal fetch() to your local server
+          // --- LOCAL FETCH FLOW ---
           const response = await fetch(`http://localhost:8080${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -237,7 +250,9 @@
           const text = await response.text();
           resEl.textContent = text;
           decResEl.textContent = decodeJWT(text);
-          decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+          decResEl.style.backgroundColor = response.ok
+            ? '#d4edda'
+            : '#f8d7da';
         }
       } catch (e) {
         reqEl.textContent = 'Error: ' + e.message;
