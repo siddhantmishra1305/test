@@ -36,6 +36,7 @@
     nav button {
       margin-right: 10px;
     }
+    /* Hidden SSO form */
     #ssoProxyForm {
       display: none;
     }
@@ -59,7 +60,7 @@
     <button onclick="switchView('authentication')">Authentication</button>
   </nav>
 
-  <!-- Force SSO Checkbox (visible on both views) -->
+  <!-- “Force SSO” checkbox (visible on either view) -->
   <div class="force-sso-container">
     <label>
       <input type="checkbox" id="forceSSO" />
@@ -107,8 +108,12 @@
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
-  <!-- Hidden form for SSO POST -->
-  <form id="ssoProxyForm" method="POST">
+  <!-- Hidden form for SSO POST (Safari and Chrome when forced) -->
+  <form
+    id="ssoProxyForm"
+    method="POST"
+    enctype="application/x-www-form-urlencoded"
+  >
     <input type="hidden" name="jwt" id="ssoJwtInput" />
   </form>
 
@@ -148,7 +153,7 @@
       return /^((?!chrome|android).)*safari/i.test(ua);
     }
 
-    // If redirected back from SSO (e.g. Safari callback), show success/failure:
+    // If the SSO provider redirects back with ?token=…&type=…, show success/failure
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
@@ -193,11 +198,11 @@
     window.addEventListener('DOMContentLoaded', populateResponseFromURL);
 
     async function sendJWT(type) {
-      // 1) Read the "Force SSO" checkbox:
+      // 1) Read the “Force SSO” checkbox
       const forceSSO = document.getElementById('forceSSO').checked;
-      // 2) Detect Safari:
+      // 2) Detect Safari
       const isBrowserSafari = isSafari();
-      // 3) If Safari OR forced, do SSO POST:
+      // 3) If Safari OR forced, use SSO POST
       const doSSO = isBrowserSafari || forceSSO;
 
       const prefix = type === 'registration' ? 'reg' : 'auth';
@@ -220,19 +225,25 @@
           base64url('dummy-signature'),
         ].join('.');
 
-        // Display the request JWT:
+        // Show the request JWT in the UI
         reqEl.textContent = jwt;
         decReqEl.textContent = decodeJWT(jwt);
 
         if (doSSO) {
-          // SSO POST via hidden form (same for Safari and Chrome when forced)
-          const ssoUrl = `https://new.auth.platformsso.ping-eng.com${path}?type=${type}`;
+          // SSO flow: always send via POST form (body = jwt=…)
+          const ssoUrl =
+            'https://new.auth.platformsso.ping-eng.com' +
+            path +
+            '?type=' +
+            encodeURIComponent(type);
+
           const form = document.getElementById('ssoProxyForm');
           form.action = ssoUrl;
           document.getElementById('ssoJwtInput').value = jwt;
+          // Submit the form (POST). Chrome and Safari will both send body="jwt=…"
           form.submit();
         } else {
-          // Local fetch flow
+          // Local debug/fetch flow
           const response = await fetch(`http://localhost:8080${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -246,6 +257,7 @@
             : '#f8d7da';
         }
       } catch (e) {
+        // JSON.parse or network error
         reqEl.textContent = 'Error: ' + e.message;
         decReqEl.textContent = '';
         resEl.textContent = '';
