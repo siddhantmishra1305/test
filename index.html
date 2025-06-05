@@ -244,7 +244,7 @@
           form.submit();
         } else {
           // Local debug/fetch flow
-          const response = await fetch(`http://localhost:8080${path}`, {
+          const response = await fetch(`http://localhost:9410${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
             body: jwt,
