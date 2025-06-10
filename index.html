@@ -63,7 +63,6 @@
     </label>
   </div>
 
-  <!-- Registration View -->
   <div id="registration" class="view active">
     <h2>Registration</h2>
     <label>Header (JSON):</label>
@@ -83,7 +82,6 @@
     <button onclick="sendJWT('registration')">Send Registration</button>
   </div>
 
-  <!-- Authentication View -->
   <div id="authentication" class="view">
     <h2>Authentication</h2>
     <label>Header (JSON):</label>
@@ -186,7 +184,6 @@
         decReqEl.textContent = decodeJWT(jwt);
 
         if (doSSO) {
-          // Create and submit form at runtime
           const ssoUrl = 'https://new.auth.platformsso.ping-eng.com' + path + '?type=' + encodeURIComponent(type);
           const form = document.createElement('form');
           form.method = 'POST';
@@ -200,6 +197,7 @@
           form.appendChild(input);
 
           document.body.appendChild(form);
+          console.log('Submitting via POST to', form.action);
           form.submit();
         } else {
           const response = await fetch(`http://localhost:9410${path}`, {
