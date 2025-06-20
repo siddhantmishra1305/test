@@ -200,7 +200,7 @@
           console.log('Submitting via POST to', form.action);
           form.submit();
         } else {
-          const response = await fetch(`http://localhost:9410${path}`, {
+          const response = await fetch(`http://127.0.0.1:9410${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
             body: jwt
