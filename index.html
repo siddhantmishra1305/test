@@ -54,6 +54,7 @@
   <nav>
     <button onclick="switchView('registration')">Registration</button>
     <button onclick="switchView('authentication')">Authentication</button>
+    <button onclick="switchView('status')">Status</button>
   </nav>
 
   <div class="force-sso-container">
@@ -99,6 +100,19 @@
     <label>Path:</label>
     <input type="text" id="authPath" value="/authenticate" />
     <button onclick="sendJWT('authentication')">Send Authentication</button>
+  </div>
+
+  <div id="status" class="view">
+    <h2>Status Check</h2>
+    <label>RP ID:</label>
+    <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
+    <label>Environment ID:</label>
+    <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
+    <label>Full Request URL:</label>
+    <pre id="statusRequestURL">...</pre>
+    <label>Response:</label>
+    <pre id="statusResponse">...</pre>
+    <button onclick="sendStatusRequest()">Send Status Request</button>
   </div>
 
   <script>
@@ -157,6 +171,8 @@
     window.addEventListener('DOMContentLoaded', populateResponseFromURL);
 
     async function sendJWT(type) {
+      if (type === 'status') return sendStatusRequest();
+
       const forceSSO = document.getElementById('forceSSO').checked;
       const isBrowserSafari = isSafari();
       const doSSO = isBrowserSafari || forceSSO;
@@ -197,7 +213,6 @@
           form.appendChild(input);
 
           document.body.appendChild(form);
-          console.log('Submitting via POST to', form.action);
           form.submit();
         } else {
           const response = await fetch(`http://127.0.0.1:9410${path}`, {
@@ -216,6 +231,27 @@
         resEl.textContent = '';
         decResEl.textContent = 'Error: ' + e.message;
         decResEl.style.backgroundColor = '#f8d7da';
+      }
+    }
+
+    async function sendStatusRequest() {
+      const rpid = document.getElementById('statusRpid').value.trim();
+      const envId = document.getElementById('statusEnvId').value.trim();
+      const url = `http://localhost:9410/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
+
+      document.getElementById('statusRequestURL').textContent = url;
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET'
+        });
+        const text = await response.text();
+        const pre = document.getElementById('statusResponse');
+        pre.textContent = text;
+        pre.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+      } catch (e) {
+        document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
+        document.getElementById('statusResponse').style.backgroundColor = '#f8d7da';
       }
     }
   </script>
