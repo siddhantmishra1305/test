@@ -4,63 +4,20 @@
   <meta charset="UTF-8" />
   <title>JWT Registration & Authentication</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    .view {
-      display: none;
-    }
-    .active {
-      display: block;
-    }
-    textarea,
-    input {
-      width: 100%;
-      margin: 10px 0;
-    }
-    textarea {
-      height: 100px;
-    }
-    pre {
-      background: #eee;
-      padding: 10px;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      border-radius: 5px;
-    }
-    button {
-      padding: 10px 20px;
-      margin-top: 10px;
-    }
-    nav button {
-      margin-right: 10px;
-    }
-    .force-sso-container {
-      margin: 15px 0;
-    }
-    .force-sso-container label {
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .force-sso-container input[type="checkbox"] {
-      margin-right: 5px;
-      transform: scale(1.1);
-      vertical-align: middle;
-    }
-    .port-container {
-      margin: 15px 0;
-    }
-    .port-container label {
-      font-size: 14px;
-      font-weight: bold;
-      margin-right: 8px;
-    }
-    .port-container input[type="number"] {
-      width: 100px;
-      display: inline-block;
-      margin: 0;
-    }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .view { display: none; }
+    .active { display: block; }
+    textarea, input { width: 100%; margin: 10px 0; }
+    textarea { height: 100px; }
+    pre { background: #eee; padding: 10px; white-space: pre-wrap; word-wrap: break-word; border-radius: 5px; }
+    button { padding: 10px 20px; margin-top: 10px; }
+    nav button { margin-right: 10px; }
+    .force-sso-container { margin: 15px 0; }
+    .force-sso-container label { cursor: pointer; font-size: 14px; }
+    .force-sso-container input[type="checkbox"] { margin-right: 5px; transform: scale(1.1); vertical-align: middle; }
+    .port-container { margin: 15px 0; }
+    .port-container label { font-size: 14px; font-weight: bold; margin-right: 8px; }
+    .port-container input[type="number"] { width: 100px; display: inline-block; margin: 0; }
   </style>
 </head>
 <body>
@@ -145,7 +102,7 @@
       if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
         document.getElementById('portStatus').textContent = 'Invalid port. Must be 1-65535.';
         document.getElementById('portStatus').style.color = '#b71c1c';
-        portInput.value = backendPort; // revert to last
+        portInput.value = backendPort; // revert
         return;
       }
       backendPort = portVal;
@@ -153,7 +110,6 @@
       document.getElementById('portStatus').style.color = '#155724';
     }
 
-    // Keep backendPort in sync with UI on load
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('customPort').value = backendPort;
       document.getElementById('portStatus').textContent = `Port set to ${backendPort}`;
@@ -243,7 +199,12 @@
         decReqEl.textContent = decodeJWT(jwt);
 
         if (doSSO) {
-          const ssoUrl = 'https://new.auth.platformsso.ping-eng.com' + path + '?type=' + encodeURIComponent(type);
+          // Fixed SSO endpoints for Safari extension / forced SSO
+          const ssoBase = 'https://apps.pingone.com/pingid/desktop';
+          const ssoUrl = type === 'registration'
+            ? `${ssoBase}/register/`
+            : `${ssoBase}/authenticate/`;
+
           const form = document.createElement('form');
           form.method = 'POST';
           form.enctype = 'application/x-www-form-urlencoded';
@@ -258,7 +219,7 @@
           document.body.appendChild(form);
           form.submit();
         } else {
-          // Use custom backend port
+          // Local agent flow (uses customizable port + free-form path field)
           const url = `http://127.0.0.1:${backendPort}${path}`;
           const response = await fetch(url, {
             method: 'POST',
@@ -282,22 +243,20 @@
     async function sendStatusRequest() {
       const rpid = document.getElementById('statusRpid').value.trim();
       const envId = document.getElementById('statusEnvId').value.trim();
-      // Use custom backend port
-      const url = `http://localhost:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
+      const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
 
       document.getElementById('statusRequestURL').textContent = url;
 
       try {
-        const response = await fetch(url, {
-          method: 'GET'
-        });
+        const response = await fetch(url, { method: 'GET' });
         const text = await response.text();
         const pre = document.getElementById('statusResponse');
         pre.textContent = text;
         pre.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
       } catch (e) {
-        document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
-        document.getElementById('statusResponse').style.backgroundColor = '#f8d7da';
+        const pre = document.getElementById('statusResponse');
+        pre.textContent = 'Error: ' + e.message;
+        pre.style.backgroundColor = '#f8d7da';
       }
     }
   </script>
