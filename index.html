@@ -202,8 +202,8 @@
           // Fixed SSO endpoints for Safari extension / forced SSO
           const ssoBase = 'https://apps.pingone.com/pingid/desktop';
           const ssoUrl = type === 'registration'
-            ? `${ssoBase}/register/`
-            : `${ssoBase}/authenticate/`;
+            ? `${ssoBase}/register`
+            : `${ssoBase}/authenticate`;
 
           const form = document.createElement('form');
           form.method = 'POST';
