@@ -189,13 +189,26 @@
      */
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
-      const token = params.get('token');
-      const type = params.get('type');
+      // Accept a few common param names just in case the extension differs
+      const token = params.get('token') || params.get('jwt') || params.get('response');
+      const typeParam = params.get('type');
 
+      // Read SSO hints (session + local storage to survive new tabs)
       const cameFromSSO = sessionStorage.getItem('pendingSSO') === '1';
-      const wasSafari = sessionStorage.getItem('ssoWasSafari') === '1';
+      const ts = parseInt(localStorage.getItem('pendingSSO_ts') || '0', 10);
+      const freshFromSSO = ts && (Date.now() - ts < 5 * 60 * 1000); // 5 minutes grace
 
-      if (!token || !type || !cameFromSSO || !wasSafari) return; // only Safari + SSO flow
+      // Only show popup in Safari when we have a token from the extension
+      if (!isSafari() || !token) return;
+
+      // Determine type best-effort
+      let type = typeParam;
+      if (!type) {
+        const path = window.location.pathname.toLowerCase();
+        if (path.includes('auth')) type = 'authentication';
+        else if (path.includes('reg')) type = 'registration';
+        else type = 'authentication';
+      }
 
       let decoded;
       try {
@@ -210,6 +223,7 @@
       // Clean up flags and URL (remove token/type from address bar)
       sessionStorage.removeItem('pendingSSO');
       sessionStorage.removeItem('ssoWasSafari');
+      localStorage.removeItem('pendingSSO_ts');
       const cleanURL = window.location.origin + window.location.pathname;
       history.replaceState({}, document.title, cleanURL);
     }
@@ -291,6 +305,8 @@
           // mark that we are going through SSO; only show popup when Safari
           sessionStorage.setItem('pendingSSO', '1');
           sessionStorage.setItem('ssoWasSafari', isBrowserSafari ? '1' : '0');
+          // Also set a timestamp in localStorage so the signal survives new tabs
+          try { localStorage.setItem('pendingSSO_ts', String(Date.now())); } catch {}
 
           // Fixed SSO endpoints for Safari extension / forced SSO
           const ssoBase = 'https://apps.pingone.com/pingid/desktop';
