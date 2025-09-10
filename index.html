@@ -352,7 +352,7 @@
     async function sendStatusRequest() {
       const rpid = document.getElementById('statusRpid').value.trim();
       const envId = document.getElementById('statusEnvId').value.trim();
-      const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
+      const url = `https://apps.pingone.com/pingid/desktop/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
 
       document.getElementById('statusRequestURL').textContent = url;
 
