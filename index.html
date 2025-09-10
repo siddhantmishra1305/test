@@ -18,6 +18,21 @@
     .port-container { margin: 15px 0; }
     .port-container label { font-size: 14px; font-weight: bold; margin-right: 8px; }
     .port-container input[type="number"] { width: 100px; display: inline-block; margin: 0; }
+
+    /* --- Modal (Safari SSO only) --- */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .modal-backdrop.active { display: flex; }
+    .modal { background: #fff; width: min(800px, 92vw); max-height: 85vh; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+    .modal-header { display:flex; align-items:center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #e5e5e5; }
+    .modal-title { margin: 0; font-size: 18px; }
+    .modal-body { padding: 16px; overflow: auto; }
+    .modal-footer { padding: 12px 16px; border-top: 1px solid #e5e5e5; display:flex; gap:10px; justify-content:flex-end; }
+    .badge { display:inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .badge.success { background: #d4edda; color: #155724; }
+    .badge.error { background: #f8d7da; color: #721c24; }
+    .btn { padding: 8px 14px; border: 1px solid #ccc; border-radius: 8px; background: #f7f7f7; cursor:pointer; }
+    .btn.primary { background: #007bff; color: #fff; border-color: #007bff; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
   </style>
 </head>
 <body>
@@ -92,6 +107,29 @@
     <button onclick="sendStatusRequest()">Send Status Request</button>
   </div>
 
+  <!-- Safari SSO Response Modal -->
+  <div id="ssoModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ssoModalTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="ssoModalTitle">SSO Extension Response</h3>
+        <button class="btn" aria-label="Close" onclick="closeSSOModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="ssoStatusBadge" class="badge">...</div>
+        <h4 style="margin-top:12px;">Decoded JWT</h4>
+        <pre id="ssoDecodedJWT">...</pre>
+        <details>
+          <summary>Raw token</summary>
+          <pre id="ssoRawToken">...</pre>
+        </details>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="copySSOResponse()">Copy decoded</button>
+        <button class="btn primary" onclick="closeSSOModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Port management
     let backendPort = 9410;
@@ -143,11 +181,21 @@
       return /^((?!chrome|android).)*safari/i.test(ua);
     }
 
+    /**
+     * Only show popup when Safari + SSO extension flow was used.
+     * We set a sessionStorage flag before submitting to the SSO endpoint,
+     * then check for ?token=... on return and show the modal instead of
+     * replacing the whole page.
+     */
     function populateResponseFromURL() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
       const type = params.get('type');
-      if (!token || !type) return;
+
+      const cameFromSSO = sessionStorage.getItem('pendingSSO') === '1';
+      const wasSafari = sessionStorage.getItem('ssoWasSafari') === '1';
+
+      if (!token || !type || !cameFromSSO || !wasSafari) return; // only Safari + SSO flow
 
       let decoded;
       try {
@@ -156,17 +204,58 @@
         decoded = 'Invalid JWT received';
       }
 
-      const success = !decoded.includes('Invalid') && !decoded.includes('Failed');
-      document.body.innerHTML = `
-        <div style="background-color: ${success ? '#d4edda' : '#f8d7da'}; padding: 30px; font-family: Arial;">
-          <h1 style="color: ${success ? '#155724' : '#721c24'};">
-            ${success ? '✅ Authentication Successful' : '❌ Authentication Failed'}
-          </h1>
-          <h3>Decoded JWT:</h3>
-          <pre style="background: white; border: 1px solid #ccc; padding: 15px; border-radius: 5px;">${decoded}</pre>
-          <a href="/" style="display: inline-block; margin-top: 20px; color: #007bff;">← Back to App</a>
-        </div>
-      `;
+      const success = !(decoded.includes('Invalid') || decoded.includes('Failed'));
+      showSSOModal({ token, decoded, type, success });
+
+      // Clean up flags and URL (remove token/type from address bar)
+      sessionStorage.removeItem('pendingSSO');
+      sessionStorage.removeItem('ssoWasSafari');
+      const cleanURL = window.location.origin + window.location.pathname;
+      history.replaceState({}, document.title, cleanURL);
+    }
+
+    function showSSOModal({ token, decoded, type, success }) {
+      const backdrop = document.getElementById('ssoModalBackdrop');
+      const badge = document.getElementById('ssoStatusBadge');
+      const decodedPre = document.getElementById('ssoDecodedJWT');
+      const rawPre = document.getElementById('ssoRawToken');
+
+      badge.textContent = success ? `✅ ${type} successful` : `❌ ${type} failed`;
+      badge.className = `badge ${success ? 'success' : 'error'}`;
+
+      decodedPre.textContent = decoded;
+      rawPre.textContent = token;
+
+      backdrop.classList.add('active');
+
+      // basic focus management
+      setTimeout(() => {
+        backdrop.querySelector('button[aria-label="Close"]').focus();
+      }, 0);
+
+      // ESC to close
+      function onKey(e) { if (e.key === 'Escape') { closeSSOModal(); } }
+      backdrop._escHandler = onKey;
+      document.addEventListener('keydown', onKey);
+
+      // click outside to close
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSSOModal(); }, { once: true });
+    }
+
+    function closeSSOModal() {
+      const backdrop = document.getElementById('ssoModalBackdrop');
+      backdrop.classList.remove('active');
+      if (backdrop._escHandler) {
+        document.removeEventListener('keydown', backdrop._escHandler);
+        backdrop._escHandler = null;
+      }
+    }
+
+    async function copySSOResponse() {
+      try {
+        const text = document.getElementById('ssoDecodedJWT').textContent;
+        await navigator.clipboard.writeText(text);
+      } catch { /* noop */ }
     }
 
     async function sendJWT(type) {
@@ -199,6 +288,10 @@
         decReqEl.textContent = decodeJWT(jwt);
 
         if (doSSO) {
+          // mark that we are going through SSO; only show popup when Safari
+          sessionStorage.setItem('pendingSSO', '1');
+          sessionStorage.setItem('ssoWasSafari', isBrowserSafari ? '1' : '0');
+
           // Fixed SSO endpoints for Safari extension / forced SSO
           const ssoBase = 'https://apps.pingone.com/pingid/desktop';
           const ssoUrl = type === 'registration'
