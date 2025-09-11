@@ -1,24 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>JWT Registration, Authentication & Status</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --muted:#555; --ok:#d4edda; --err:#f8d7da; }
-    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; padding:20px; }
     nav button { margin-right: 10px; padding:10px 14px; }
-    .view { display: none; }
-    .active { display: block; }
-    textarea, input[type="text"], input[type="number"] { width: 100%; margin: 8px 0 12px; }
-    textarea { height: 110px; }
-    pre { background: #eee; padding: 10px; white-space: pre-wrap; word-wrap: break-word; border-radius: 6px; }
-    .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .view { display:none; } .active { display:block; }
+    textarea, input[type="text"], input[type="number"] { width:100%; margin:8px 0 12px; }
+    textarea { height:110px; }
+    pre { background:#eee; padding:10px; white-space:pre-wrap; word-wrap:break-word; border-radius:6px; }
+    .hint { color:#555; font-size:12px; margin-top:4px; }
     .row { margin: 14px 0; }
-    .ok { background: var(--ok); }
-    .err { background: var(--err); }
-    .port { margin: 16px 0; }
-    .port label { font-weight: 600; margin-right: 8px; }
   </style>
 </head>
 <body>
@@ -29,141 +23,106 @@
   </nav>
 
   <p class="hint">
-    Safari → redirects to <code>apps.pingone.com</code> (invokes SSO/ISO extension) and returns here with a response.<br/>
-    Other browsers → use local agent at <code>http://127.0.0.1:{port}</code>.
+    Safari → opens a popup to <code>apps.pingone.com</code> (top-level SSO) and returns the result to this page via a bridge.<br/>
+    Other browsers → local agent at <code>http://127.0.0.1:{port}</code>.
   </p>
 
-  <div class="port">
-    <label for="customPort">Backend Port:</label>
+  <div class="row">
+    <label for="customPort">Backend Port (non-Safari):</label>
     <input type="number" id="customPort" min="1" max="65535" value="9410" />
-    <button onclick="applyPort()">Apply</button>
-    <span id="portStatus" class="hint" style="margin-left:8px;"></span>
   </div>
 
   <!-- Registration -->
   <div id="registration" class="view active" aria-hidden="false">
     <h2>Registration</h2>
-    <div class="row">
-      <label>Header (JSON):</label>
-      <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-      <label>Body (JSON):</label>
-      <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
-    </div>
+    <label>Header (JSON):</label>
+    <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
+    <label>Body (JSON):</label>
+    <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
 
-    <div class="row">
-      <label>Request JWT String:</label>
-      <pre id="regRequestString">...</pre>
-      <label>Decoded Request JWT:</label>
-      <pre id="regDecodedRequest">...</pre>
-    </div>
+    <label>Request JWT String:</label>
+    <pre id="regRequestString">...</pre>
+    <label>Decoded Request JWT:</label>
+    <pre id="regDecodedRequest">...</pre>
 
-    <div class="row">
-      <label>Response JWT String:</label>
-      <pre id="regResponseString">...</pre>
-      <label>Decoded Response JWT:</label>
-      <pre id="regDecodedResponse">...</pre>
-    </div>
+    <label>Response JWT String:</label>
+    <pre id="regResponseString">...</pre>
+    <label>Decoded Response JWT:</label>
+    <pre id="regDecodedResponse">...</pre>
 
-    <div class="row">
-      <label>Path (local agent only):</label>
-      <input type="text" id="regPath" value="/register" />
-    </div>
+    <label>Local agent path (non-Safari):</label>
+    <input type="text" id="regPath" value="/register" />
 
-    <button onclick="sendJWT('registration')">Send Registration</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button onclick="sendJWT('registration')">Send Registration</button>
+      <button onclick="startSafariSSO('registration')">Safari SSO (popup)</button>
+    </div>
   </div>
 
   <!-- Authentication -->
   <div id="authentication" class="view" aria-hidden="true">
     <h2>Authentication</h2>
-    <div class="row">
-      <label>Header (JSON):</label>
-      <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-      <label>Body (JSON):</label>
-      <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
-    </div>
+    <label>Header (JSON):</label>
+    <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
+    <label>Body (JSON):</label>
+    <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
 
-    <div class="row">
-      <label>Request JWT String:</label>
-      <pre id="authRequestString">...</pre>
-      <label>Decoded Request JWT:</label>
-      <pre id="authDecodedRequest">...</pre>
-    </div>
+    <label>Request JWT String:</label>
+    <pre id="authRequestString">...</pre>
+    <label>Decoded Request JWT:</label>
+    <pre id="authDecodedRequest">...</pre>
 
-    <div class="row">
-      <label>Response JWT String:</label>
-      <pre id="authResponseString">...</pre>
-      <label>Decoded Response JWT:</label>
-      <pre id="authDecodedResponse">...</pre>
-    </div>
+    <label>Response JWT String:</label>
+    <pre id="authResponseString">...</pre>
+    <label>Decoded Response JWT:</label>
+    <pre id="authDecodedResponse">...</pre>
 
-    <div class="row">
-      <label>Path (local agent only):</label>
-      <input type="text" id="authPath" value="/authenticate" />
-    </div>
+    <label>Local agent path (non-Safari):</label>
+    <input type="text" id="authPath" value="/authenticate" />
 
-    <button onclick="sendJWT('authentication')">Send Authentication</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button onclick="sendJWT('authentication')">Send Authentication</button>
+      <button onclick="startSafariSSO('authentication')">Safari SSO (popup)</button>
+    </div>
   </div>
 
   <!-- Status -->
   <div id="statusView" class="view" aria-hidden="true">
     <h2>Status Check</h2>
-    <div class="row">
-      <label>RP ID:</label>
-      <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
-      <label>Environment ID:</label>
-      <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
-    </div>
+    <label>RP ID:</label>
+    <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
+    <label>Environment ID:</label>
+    <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
 
-    <div class="row">
-      <label>Full Request URL:</label>
-      <pre id="statusRequestURL">...</pre>
-    </div>
+    <label>Full SSO Request URL (debug):</label>
+    <pre id="statusRequestURL">...</pre>
 
-    <div class="row">
-      <label>Response:</label>
-      <pre id="statusResponse">...</pre>
-    </div>
+    <label>Response:</label>
+    <pre id="statusResponse">...</pre>
 
-    <button onclick="sendStatusRequest()">Send Status Request</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button onclick="sendStatusRequest()">Send Status (non-Safari local agent)</button>
+      <button onclick="startSafariSSO('status')">Safari SSO (popup)</button>
+    </div>
   </div>
 
   <script>
-    // =======================
-    // Config
-    // =======================
-    const SSO_BASE = 'https://apps.pingone.com/pingid/desktop';
+    const ORIGIN = "https://YOUR.DOMAIN";                 // <-- change
+    const BRIDGE_PATH = "/sso-bridge.html";               // <-- change
+    const BRIDGE_URL = ORIGIN + BRIDGE_PATH;
+    const SSO_BASE = "https://apps.pingone.com/pingid/desktop";
 
-    // =======================
-    // Port / init
-    // =======================
     let backendPort = 9410;
-    function applyPort() {
-      const el = document.getElementById('customPort');
-      const v = parseInt(el.value, 10);
-      const ps = document.getElementById('portStatus');
-      if (Number.isNaN(v) || v < 1 || v > 65535) {
-        ps.textContent = 'Invalid port. Must be 1-65535.';
-        ps.style.color = '#b71c1c';
-        el.value = backendPort;
-        return;
-      }
-      backendPort = v;
-      ps.textContent = `Port set to ${backendPort}`;
-      ps.style.color = '#155724';
+    document.getElementById('customPort').addEventListener('change', e => {
+      const v = parseInt(e.target.value, 10);
+      if (!Number.isNaN(v) && v >= 1 && v <= 65535) backendPort = v;
+    });
+
+    function isSafari() {
+      const ua = navigator.userAgent;
+      return /^((?!chrome|android).)*safari/i.test(ua);
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('customPort').value = backendPort;
-      document.getElementById('portStatus').textContent = `Port set to ${backendPort}`;
-      document.getElementById('portStatus').style.color = '#155724';
-      handleReturnFromSSO();
-    });
-    // Safari BFCache: when user returns via back/forward restore
-    window.addEventListener('pageshow', (e) => { if (e.persisted) handleReturnFromSSO(); });
-
-    // =======================
-    // UI helpers
-    // =======================
     function switchView(viewId) {
       document.querySelectorAll('.view').forEach(div => {
         div.classList.remove('active');
@@ -173,60 +132,10 @@
       if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
     }
 
-    function debugBanner(msg) {
-  // Append to sessionStorage log
-  const key = "ssoDebugLog";
-  const existing = JSON.parse(sessionStorage.getItem(key) || "[]");
-  existing.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-  sessionStorage.setItem(key, JSON.stringify(existing));
-
-  renderDebugBanner(existing);
-}
-
-function renderDebugBanner(messages) {
-  let b = document.getElementById('sso-debug');
-  if (!b) {
-    b = document.createElement('div');
-    b.id = 'sso-debug';
-    b.style.cssText = `
-      position:fixed;
-      top:10px; right:10px;
-      max-width: 50vw;
-      max-height: 40vh;
-      overflow:auto;
-      background:#fff7cc;
-      border:1px solid #e6c200;
-      padding:8px 10px;
-      border-radius:8px;
-      z-index:99999;
-      font:12px/1.4 system-ui;
-      cursor:pointer;
-    `;
-    b.title = "Click to clear debug log";
-    b.onclick = () => {
-      sessionStorage.removeItem("ssoDebugLog");
-      b.remove();
-    };
-    document.body.appendChild(b);
-  }
-  b.innerHTML = messages.map(m => `<div>${m}</div>`).join("");
-}
-
-// On load, replay stored messages
-document.addEventListener('DOMContentLoaded', () => {
-  const stored = JSON.parse(sessionStorage.getItem("ssoDebugLog") || "[]");
-  if (stored.length > 0) renderDebugBanner(stored);
-});
-
-
-
-    // =======================
-    // JWT helpers
-    // =======================
+    // ---- JWT helpers
     function base64url(input) {
       return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
-
     function decodeJWTIfPossible(token) {
       if (!token || token.split('.').length < 2) return 'Not a JWT or malformed token.';
       try {
@@ -234,104 +143,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const header = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
         const payload = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
         return JSON.stringify({ header, payload }, null, 2);
-      } catch {
-        return 'Failed to decode JWT.';
-      }
+      } catch { return 'Failed to decode JWT.' }
     }
 
-    function isSafari() {
-      const ua = navigator.userAgent;
-      return /^((?!chrome|android).)*safari/i.test(ua);
-    }
-
-    function currentReturnUrl() {
-      return window.location.origin + window.location.pathname; // same page, no query
-    }
-
-    function submitTopLevelForm(action, fields, method = 'POST') {
-      const form = document.createElement('form');
-      form.method = method;
-      form.action = action;
-      form.target = '_top';
-      Object.entries(fields).forEach(([name, value]) => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = name;
-        input.value = value;
-        form.appendChild(input);
-      });
-      document.body.appendChild(form);
-      form.submit();
-    }
-
-    // =======================
-    // SSO: Safari redirect
-    // =======================
-    function doSafariSSORedirect(type, payload) {
-      // Save context to restore correct tab & mapping on return
-      sessionStorage.setItem('pendingSSO', '1');
-      sessionStorage.setItem('pendingType', type);
-      sessionStorage.setItem('pendingViewId',
-        type === 'registration' ? 'registration' :
-        type === 'authentication' ? 'authentication' : 'statusView'
-      );
-      sessionStorage.setItem('pending_ts', String(Date.now()));
-
-      const returnUrl = currentReturnUrl();
-      const path = (type === 'registration') ? '/register'
-                 : (type === 'authentication') ? '/authenticate'
-                 : '/status';
-      const action = SSO_BASE + path;
-
-      if (type === 'registration' || type === 'authentication') {
-        submitTopLevelForm(action, {
-          jwt: payload,
-          return_url: returnUrl,
-          redirect_uri: returnUrl,
-          type
-        }, 'POST');
-      } else {
-        const url = new URL(action);
-        url.searchParams.set('rpid', payload.rpid);
-        url.searchParams.set('environmentId', payload.environmentId);
-        url.searchParams.set('return_url', returnUrl);
-        url.searchParams.set('redirect_uri', returnUrl);
-        url.searchParams.set('type', type);
-
-        document.getElementById('statusRequestURL').textContent = url.toString();
-        window.location.assign(url.toString());
-      }
-    }
-
-    // =======================
-    // Send actions
-    // =======================
+    // ---- Local agent (non-Safari) flows
     async function sendJWT(type) {
       const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerEl = document.getElementById(`${prefix}Header`);
       const bodyEl = document.getElementById(`${prefix}Body`);
-      const reqEl = document.getElementById(`${prefix}RequestString`), decReqEl = document.getElementById(`${prefix}DecodedRequest`);
-      const resEl = document.getElementById(`${prefix}ResponseString`), decResEl = document.getElementById(`${prefix}DecodedResponse`);
+      const reqEl = document.getElementById(`${prefix}RequestString`);
+      const decReqEl = document.getElementById(`${prefix}DecodedRequest`);
+      const resEl = document.getElementById(`${prefix}ResponseString`);
+      const decResEl = document.getElementById(`${prefix}DecodedResponse`);
       const path = document.getElementById(`${prefix}Path`).value;
 
       try {
         const headerJSON = JSON.parse(headerEl.value);
         const bodyJSON = JSON.parse(bodyEl.value);
-
         const jwt = [
           base64url(JSON.stringify(headerJSON)),
           base64url(JSON.stringify(bodyJSON)),
           base64url('dummy-signature')
         ].join('.');
-
         reqEl.textContent = jwt;
         decReqEl.textContent = decodeJWTIfPossible(jwt);
 
-        if (isSafari()) {
-          debugBanner(`Safari: redirecting to apps.pingone.com for ${type}`);
-          doSafariSSORedirect(type, jwt);
-          return;
-        }
+        if (isSafari()) { startSafariSSO(type, jwt); return; }
 
         // Non-Safari → local agent
         const url = `http://127.0.0.1:${backendPort}${path}`;
@@ -339,13 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = await resp.text();
         resEl.textContent = text;
         decResEl.textContent = decodeJWTIfPossible(text);
-        decResEl.className = resp.ok ? 'ok' : 'err';
       } catch (e) {
         reqEl.textContent = 'Error: ' + e.message;
         decReqEl.textContent = '';
-        resEl.textContent = '';
-        decResEl.textContent = 'Error: ' + e.message;
-        decResEl.className = 'err';
       }
     }
 
@@ -353,11 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const rpid = document.getElementById('statusRpid').value.trim();
       const environmentId = document.getElementById('statusEnvId').value.trim();
 
-      if (isSafari()) {
-        debugBanner('Safari: redirecting to apps.pingone.com for status');
-        doSafariSSORedirect('status', { rpid, environmentId });
-        return;
-      }
+      if (isSafari()) { startSafariSSO('status'); return; }
 
       const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
       document.getElementById('statusRequestURL').textContent = url;
@@ -365,68 +194,92 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const resp = await fetch(url, { method: 'GET' });
         const text = await resp.text();
-        const pre = document.getElementById('statusResponse');
-        pre.textContent = text;
-        pre.className = resp.ok ? 'ok' : 'err';
+        document.getElementById('statusResponse').textContent = text;
       } catch (e) {
-        const pre = document.getElementById('statusResponse');
-        pre.textContent = 'Error: ' + e.message;
-        pre.className = 'err';
+        document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
       }
     }
 
-    // =======================
-    // Return handling
-    // =======================
-    function getSSOResponseFromLocation() {
-      const out = { token: null, type: null, where: null };
-      const qs = new URLSearchParams(window.location.search);
-      out.token = qs.get('token') || qs.get('jwt') || qs.get('response');
-      out.type  = qs.get('type');
-      if (out.token) out.where = 'query';
-
-      if (!out.token && window.location.hash) {
-        const hp = new URLSearchParams(window.location.hash.slice(1));
-        out.token = hp.get('token') || hp.get('jwt') || hp.get('response');
-        out.type  = out.type || hp.get('type');
-        if (out.token) out.where = 'hash';
-      }
-      return out;
+    // ---- Safari popup bridge flow
+    function genState() {
+      const s = crypto.getRandomValues(new Uint8Array(16));
+      return Array.from(s, b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    function handleReturnFromSSO() {
-      debugBanner(`Loaded URL → search="${location.search}" hash="${location.hash}"`);
-      const { token, type, where } = getSSOResponseFromLocation();
-      if (!token) { debugBanner('No token found in URL.'); return; }
+    // Listen for the bridge to post the token back
+    window.addEventListener('message', (evt) => {
+      if (evt.origin !== ORIGIN) return; // security
+      if (!evt.data || evt.data.type !== 'sso-result') return;
 
-      debugBanner(`Token found in ${where}; length=${token.length}`);
+      const { token, state, flowType } = evt.data;
+      const expected = sessionStorage.getItem('sso_state');
+      const viewId = sessionStorage.getItem('sso_view');
 
-      const viewId = sessionStorage.getItem('pendingViewId') || 'authentication';
-      const typeHint = sessionStorage.getItem('pendingType') || type || (
-        location.pathname.toLowerCase().includes('reg') ? 'registration' :
-        location.pathname.toLowerCase().includes('status') ? 'status' :
-        'authentication'
-      );
+      if (!expected || state !== expected) return; // ignore unexpected
+      if (viewId) switchView(viewId);
 
-      switchView(viewId);
-
-      if (typeHint === 'registration') {
+      // Fill the right boxes
+      if (flowType === 'registration') {
         document.getElementById('regResponseString').textContent = token;
         document.getElementById('regDecodedResponse').textContent = decodeJWTIfPossible(token);
-      } else if (typeHint === 'authentication') {
+      } else if (flowType === 'authentication') {
         document.getElementById('authResponseString').textContent = token;
         document.getElementById('authDecodedResponse').textContent = decodeJWTIfPossible(token);
       } else {
-        const pre = document.getElementById('statusResponse');
-        pre.textContent = token + '\n\n---\n\n' + decodeJWTIfPossible(token);
+        document.getElementById('statusResponse').textContent = token + '\n\n---\n\n' + decodeJWTIfPossible(token);
       }
 
-      // Clean up and prettify the address bar
-      sessionStorage.removeItem('pendingSSO');
-      sessionStorage.removeItem('pendingType');
-      sessionStorage.removeItem('pendingViewId');
-      sessionStorage.removeItem('pending_ts');
-      history.replaceState({}, document.title, location.origin + location.pathname);
+      // cleanup state
+      sessionStorage.removeItem('sso_state');
+      sessionStorage.removeItem('sso_view');
+    });
+
+    function startSafariSSO(type, jwtOpt) {
+      // Prepare state + remember which tab to restore
+      const state = genState();
+      sessionStorage.setItem('sso_state', state);
+      const viewId = (type === 'registration') ? 'registration' : (type === 'authentication') ? 'authentication' : 'statusView';
+      sessionStorage.setItem('sso_view', viewId);
+
+      // Open a popup we control (so it has window.opener = this page)
+      const popup = window.open("about:blank", "ssoBridge", "popup=1,width=480,height=640");
+      if (!popup) { alert("Please allow popups for this site to use Safari SSO."); return; }
+      popup.document.write("<p>Starting SSO…</p>");
+
+      const returnUrl = `${BRIDGE_URL}?state=${encodeURIComponent(state)}&type=${encodeURIComponent(type)}`;
+      const path = (type === 'registration') ? '/register'
+                 : (type === 'authentication') ? '/authenticate'
+                 : '/status';
+      const action = SSO_BASE + path;
+
+      if (type === 'registration' || type === 'authentication') {
+        // POST jwt + return URL to apps.pingone.com in the popup (top-level)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = action;
+        form.target = popup.name;
+        const fJwt = document.createElement('input');
+        fJwt.type = 'hidden'; fJwt.name = 'jwt'; fJwt.value = jwtOpt || '';
+        const fRet = document.createElement('input');
+        fRet.type = 'hidden'; fRet.name = 'return_url'; fRet.value = returnUrl;
+        const fRet2 = document.createElement('input');
+        fRet2.type = 'hidden'; fRet2.name = 'redirect_uri'; fRet2.value = returnUrl;
+        const fType = document.createElement('input');
+        fType.type = 'hidden'; fType.name = 'type'; fType.value = type;
+        form.append(fJwt, fRet, fRet2, fType);
+        document.body.appendChild(form);
+        form.submit();
+      } else {
+        // GET status in the popup
+        const url = new URL(action);
+        url.searchParams.set('rpid', document.getElementById('statusRpid').value.trim());
+        url.searchParams.set('environmentId', document.getElementById('statusEnvId').value.trim());
+        url.searchParams.set('return_url', returnUrl);
+        url.searchParams.set('redirect_uri', returnUrl);
+        url.searchParams.set('type', type);
+        document.getElementById('statusRequestURL').textContent = url.toString();
+        popup.location = url.toString();
+      }
     }
   </script>
 </body>
