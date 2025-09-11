@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>JWT Registration & Authentication</title>
+  <title>JWT Registration, Authentication & Status</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
     .view { display: none; }
@@ -12,42 +12,22 @@
     pre { background: #eee; padding: 10px; white-space: pre-wrap; word-wrap: break-word; border-radius: 5px; }
     button { padding: 10px 20px; margin-top: 10px; }
     nav button { margin-right: 10px; }
-    .force-sso-container { margin: 15px 0; }
-    .force-sso-container label { cursor: pointer; font-size: 14px; }
-    .force-sso-container input[type="checkbox"] { margin-right: 5px; transform: scale(1.1); vertical-align: middle; }
     .port-container { margin: 15px 0; }
     .port-container label { font-size: 14px; font-weight: bold; margin-right: 8px; }
-    .port-container input[type="number"] { width: 100px; display: inline-block; margin: 0; }
-
-    /* --- Modal (Safari SSO only) --- */
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
-    .modal-backdrop.active { display: flex; }
-    .modal { background: #fff; width: min(800px, 92vw); max-height: 85vh; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
-    .modal-header { display:flex; align-items:center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #e5e5e5; }
-    .modal-title { margin: 0; font-size: 18px; }
-    .modal-body { padding: 16px; overflow: auto; }
-    .modal-footer { padding: 12px 16px; border-top: 1px solid #e5e5e5; display:flex; gap:10px; justify-content:flex-end; }
-    .badge { display:inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-    .badge.success { background: #d4edda; color: #155724; }
-    .badge.error { background: #f8d7da; color: #721c24; }
-    .btn { padding: 8px 14px; border: 1px solid #ccc; border-radius: 8px; background: #f7f7f7; cursor:pointer; }
-    .btn.primary { background: #007bff; color: #fff; border-color: #007bff; }
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+    .hint { color:#555; font-size:12px; margin-top:4px; }
   </style>
 </head>
 <body>
   <nav>
     <button onclick="switchView('registration')">Registration</button>
     <button onclick="switchView('authentication')">Authentication</button>
-    <button onclick="switchView('status')">Status</button>
+    <button onclick="switchView('statusView')">Status</button>
   </nav>
 
-  <div class="force-sso-container">
-    <label>
-      <input type="checkbox" id="forceSSO" />
-      Force SSO (use extension URL even if not Safari)
-    </label>
-  </div>
+  <p class="hint">
+    Safari → redirects to apps.pingone.com (invokes SSO/ISO extension) and returns here with a response.<br/>
+    Other browsers → use local agent at <code>http://127.0.0.1:{port}</code>.
+  </p>
 
   <div class="port-container">
     <label for="customPort">Backend Port:</label>
@@ -62,15 +42,18 @@
     <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
     <label>Body (JSON):</label>
     <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
+
     <label>Request JWT String:</label>
     <pre id="regRequestString">...</pre>
     <label>Decoded Request JWT:</label>
     <pre id="regDecodedRequest">...</pre>
+
     <label>Response JWT String:</label>
     <pre id="regResponseString">...</pre>
     <label>Decoded Response JWT:</label>
     <pre id="regDecodedResponse">...</pre>
-    <label>Path:</label>
+
+    <label>Path (local agent only):</label>
     <input type="text" id="regPath" value="/register" />
     <button onclick="sendJWT('registration')">Send Registration</button>
   </div>
@@ -81,59 +64,44 @@
     <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
     <label>Body (JSON):</label>
     <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
+
     <label>Request JWT String:</label>
     <pre id="authRequestString">...</pre>
     <label>Decoded Request JWT:</label>
     <pre id="authDecodedRequest">...</pre>
+
     <label>Response JWT String:</label>
     <pre id="authResponseString">...</pre>
     <label>Decoded Response JWT:</label>
     <pre id="authDecodedResponse">...</pre>
-    <label>Path:</label>
+
+    <label>Path (local agent only):</label>
     <input type="text" id="authPath" value="/authenticate" />
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
-  <div id="status" class="view">
+  <div id="statusView" class="view">
     <h2>Status Check</h2>
     <label>RP ID:</label>
     <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
     <label>Environment ID:</label>
     <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
+
     <label>Full Request URL:</label>
     <pre id="statusRequestURL">...</pre>
+
     <label>Response:</label>
     <pre id="statusResponse">...</pre>
+
     <button onclick="sendStatusRequest()">Send Status Request</button>
   </div>
 
-  <!-- Safari SSO Response Modal -->
-  <div id="ssoModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ssoModalTitle">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title" id="ssoModalTitle">SSO Extension Response</h3>
-        <button class="btn" aria-label="Close" onclick="closeSSOModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="ssoStatusBadge" class="badge">...</div>
-        <h4 style="margin-top:12px;">Decoded JWT</h4>
-        <pre id="ssoDecodedJWT">...</pre>
-        <details>
-          <summary>Raw token</summary>
-          <pre id="ssoRawToken">...</pre>
-        </details>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="copySSOResponse()">Copy decoded</button>
-        <button class="btn primary" onclick="closeSSOModal()">OK</button>
-      </div>
-    </div>
-  </div>
-
   <script>
-    // Port management
-    let backendPort = 9410;
+    // ---------- Config ----------
+    const SSO_BASE = 'https://apps.pingone.com/pingid/desktop';
 
+    // ---------- State / Port ----------
+    let backendPort = 9410;
     function applyPort() {
       const portInput = document.getElementById('customPort');
       let portVal = parseInt(portInput.value, 10);
@@ -144,7 +112,7 @@
         return;
       }
       backendPort = portVal;
-      document.getElementById('portStatus').textContent = `Port set to ${backendPort}`;
+      document.getElementById('portStatus')..textContent = `Port set to ${backendPort}`;
       document.getElementById('portStatus').style.color = '#155724';
     }
 
@@ -152,27 +120,35 @@
       document.getElementById('customPort').value = backendPort;
       document.getElementById('portStatus').textContent = `Port set to ${backendPort}`;
       document.getElementById('portStatus').style.color = '#155724';
-      populateResponseFromURL();
+      handleReturnFromSSO();
     });
 
-    function switchView(view) {
-      document.querySelectorAll('.view').forEach(div => div.classList.remove('active'));
-      document.getElementById(view).classList.add('active');
+    // ---------- Utilities ----------
+    function switchView(viewId) {
+      document.querySelectorAll('.view').forEach(div => {
+        div.classList.remove('active');
+        div.setAttribute('aria-hidden', 'true');
+      });
+      const target = document.getElementById(viewId);
+      if (target) {
+        target.classList.add('active');
+        target.setAttribute('aria-hidden', 'false');
+      }
     }
 
     function base64url(input) {
       return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
 
-    function decodeJWT(jwt) {
-      const parts = jwt.split('.');
-      if (parts.length < 2) return 'Invalid JWT';
+    function decodeJWTIfPossible(token) {
+      if (!token || token.split('.').length < 2) return 'Not a JWT or malformed token.';
       try {
-        const header = JSON.parse(atob(parts[0].replace(/-/g, '+').replace(/_/g, '/')));
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const [h, p] = token.split('.');
+        const header = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
+        const payload = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
         return JSON.stringify({ header, payload }, null, 2);
       } catch {
-        return 'Failed to decode JWT';
+        return 'Failed to decode JWT.';
       }
     }
 
@@ -181,104 +157,67 @@
       return /^((?!chrome|android).)*safari/i.test(ua);
     }
 
-    /**
-     * Only show popup when Safari + SSO extension flow was used.
-     * We set a sessionStorage flag before submitting to the SSO endpoint,
-     * then check for ?token=... on return and show the modal instead of
-     * replacing the whole page.
-     */
-    function populateResponseFromURL() {
-      const params = new URLSearchParams(window.location.search);
-      // Accept a few common param names just in case the extension differs
-      const token = params.get('token') || params.get('jwt') || params.get('response');
-      const typeParam = params.get('type');
-
-      // Read SSO hints (session + local storage to survive new tabs)
-      const cameFromSSO = sessionStorage.getItem('pendingSSO') === '1';
-      const ts = parseInt(localStorage.getItem('pendingSSO_ts') || '0', 10);
-      const freshFromSSO = ts && (Date.now() - ts < 5 * 60 * 1000); // 5 minutes grace
-
-      // Only show popup in Safari when we have a token from the extension
-      if (!isSafari() || !token) return;
-
-      // Determine type best-effort
-      let type = typeParam;
-      if (!type) {
-        const path = window.location.pathname.toLowerCase();
-        if (path.includes('auth')) type = 'authentication';
-        else if (path.includes('reg')) type = 'registration';
-        else type = 'authentication';
-      }
-
-      let decoded;
-      try {
-        decoded = decodeJWT(token);
-      } catch {
-        decoded = 'Invalid JWT received';
-      }
-
-      const success = !(decoded.includes('Invalid') || decoded.includes('Failed'));
-      showSSOModal({ token, decoded, type, success });
-
-      // Clean up flags and URL (remove token/type from address bar)
-      sessionStorage.removeItem('pendingSSO');
-      sessionStorage.removeItem('ssoWasSafari');
-      localStorage.removeItem('pendingSSO_ts');
-      const cleanURL = window.location.origin + window.location.pathname;
-      history.replaceState({}, document.title, cleanURL);
+    function currentReturnUrl() {
+      // Return to same path (no query) so we can cleanly parse extension response
+      return window.location.origin + window.location.pathname;
     }
 
-    function showSSOModal({ token, decoded, type, success }) {
-      const backdrop = document.getElementById('ssoModalBackdrop');
-      const badge = document.getElementById('ssoStatusBadge');
-      const decodedPre = document.getElementById('ssoDecodedJWT');
-      const rawPre = document.getElementById('ssoRawToken');
-
-      badge.textContent = success ? `✅ ${type} successful` : `❌ ${type} failed`;
-      badge.className = `badge ${success ? 'success' : 'error'}`;
-
-      decodedPre.textContent = decoded;
-      rawPre.textContent = token;
-
-      backdrop.classList.add('active');
-
-      // basic focus management
-      setTimeout(() => {
-        backdrop.querySelector('button[aria-label="Close"]').focus();
-      }, 0);
-
-      // ESC to close
-      function onKey(e) { if (e.key === 'Escape') { closeSSOModal(); } }
-      backdrop._escHandler = onKey;
-      document.addEventListener('keydown', onKey);
-
-      // click outside to close
-      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSSOModal(); }, { once: true });
+    function submitTopLevelForm(action, fields, method = 'POST') {
+      const form = document.createElement('form');
+      form.method = method;
+      form.action = action;
+      form.target = '_top';
+      Object.entries(fields).forEach(([name, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
     }
 
-    function closeSSOModal() {
-      const backdrop = document.getElementById('ssoModalBackdrop');
-      backdrop.classList.remove('active');
-      if (backdrop._escHandler) {
-        document.removeEventListener('keydown', backdrop._escHandler);
-        backdrop._escHandler = null;
+    function doSafariSSORedirect(type, payload) {
+      // Persist context so we can restore the right tab on return
+      sessionStorage.setItem('pendingSSO', '1');
+      sessionStorage.setItem('pendingType', type);
+      sessionStorage.setItem('pendingViewId',
+        type === 'registration' ? 'registration' :
+        type === 'authentication' ? 'authentication' : 'statusView'
+      );
+      sessionStorage.setItem('pending_ts', String(Date.now()));
+
+      const returnUrl = currentReturnUrl();
+      const path = (type === 'registration')
+        ? '/register' : (type === 'authentication')
+        ? '/authenticate' : '/status';
+      const action = SSO_BASE + path;
+
+      if (type === 'registration' || type === 'authentication') {
+        // POST jwt + return URLs
+        submitTopLevelForm(action, {
+          jwt: payload,
+          return_url: returnUrl,
+          redirect_uri: returnUrl,
+          type
+        }, 'POST');
+      } else {
+        // Status via GET with query params
+        const url = new URL(action);
+        url.searchParams.set('rpid', payload.rpid);
+        url.searchParams.set('environmentId', payload.environmentId);
+        url.searchParams.set('return_url', returnUrl);
+        url.searchParams.set('redirect_uri', returnUrl);
+        url.searchParams.set('type', type);
+
+        document.getElementById('statusRequestURL').textContent = url.toString();
+        window.location.assign(url.toString());
       }
     }
 
-    async function copySSOResponse() {
-      try {
-        const text = document.getElementById('ssoDecodedJWT').textContent;
-        await navigator.clipboard.writeText(text);
-      } catch { /* noop */ }
-    }
-
+    // ---------- Actions ----------
     async function sendJWT(type) {
-      if (type === 'status') return sendStatusRequest();
-
-      const forceSSO = document.getElementById('forceSSO').checked;
-      const isBrowserSafari = isSafari();
-      const doSSO = isBrowserSafari || forceSSO;
-
       const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerEl = document.getElementById(`${prefix}Header`);
       const bodyEl = document.getElementById(`${prefix}Body`);
@@ -298,48 +237,27 @@
           base64url('dummy-signature')
         ].join('.');
 
+        // show the request
         reqEl.textContent = jwt;
-        decReqEl.textContent = decodeJWT(jwt);
+        decReqEl.textContent = decodeJWTIfPossible(jwt);
 
-        if (doSSO) {
-          // mark that we are going through SSO; only show popup when Safari
-          sessionStorage.setItem('pendingSSO', '1');
-          sessionStorage.setItem('ssoWasSafari', isBrowserSafari ? '1' : '0');
-          // Also set a timestamp in localStorage so the signal survives new tabs
-          try { localStorage.setItem('pendingSSO_ts', String(Date.now())); } catch {}
-
-          // Fixed SSO endpoints for Safari extension / forced SSO
-          const ssoBase = 'https://apps.pingone.com/pingid/desktop';
-          const ssoUrl = type === 'registration'
-            ? `${ssoBase}/register`
-            : `${ssoBase}/authenticate`;
-
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.enctype = 'application/x-www-form-urlencoded';
-          form.action = ssoUrl;
-
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = 'jwt';
-          input.value = jwt;
-          form.appendChild(input);
-
-          document.body.appendChild(form);
-          form.submit();
-        } else {
-          // Local agent flow (uses customizable port + free-form path field)
-          const url = `http://127.0.0.1:${backendPort}${path}`;
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: jwt
-          });
-          const text = await response.text();
-          resEl.textContent = text;
-          decResEl.textContent = decodeJWT(text);
-          decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+        if (isSafari()) {
+          // Safari → go through apps.pingone.com (SSO/ISO extension)
+          doSafariSSORedirect(type, jwt);
+          return;
         }
+
+        // Non-Safari → local agent flow
+        const url = `http://127.0.0.1:${backendPort}${path}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: jwt
+        });
+        const text = await response.text();
+        resEl.textContent = text;
+        decResEl.textContent = decodeJWTIfPossible(text);
+        decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
       } catch (e) {
         reqEl.textContent = 'Error: ' + e.message;
         decReqEl.textContent = '';
@@ -349,45 +267,71 @@
       }
     }
 
-    <script>
-  async function sendStatusRequest() {
-    const rpid = document.getElementById('statusRpid').value.trim();
-    const envId = document.getElementById('statusEnvId').value.trim();
+    async function sendStatusRequest() {
+      const rpid = document.getElementById('statusRpid').value.trim();
+      const environmentId = document.getElementById('statusEnvId').value.trim();
 
-    const forceSSO = document.getElementById('forceSSO').checked;
-    const doSSO = isSafari() || forceSSO;
+      if (isSafari()) {
+        // Safari → SSO/ISO extension redirect
+        doSafariSSORedirect('status', { rpid, environmentId });
+        return;
+      }
 
-    if (doSSO) {
-      // Mirror the SSO behavior used by registration/authentication
-      const ssoBase = 'https://apps.pingone.com/pingid/desktop';
-      const ssoUrl = `${ssoBase}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
+      // Non-Safari → local agent flow
+      const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
+      document.getElementById('statusRequestURL').textContent = url;
 
-      // Show where we're going
-      document.getElementById('statusRequestURL').textContent = ssoUrl + '  (Safari/SSO)';
-
-      // Navigate to SSO endpoint (GET). If you prefer a new tab, use window.open(ssoUrl, '_blank')
-      window.location.assign(ssoUrl);
-      return;
+      try {
+        const response = await fetch(url, { method: 'GET' });
+        const text = await response.text();
+        const pre = document.getElementById('statusResponse');
+        pre.textContent = text;
+        pre.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+      } catch (e) {
+        const pre = document.getElementById('statusResponse');
+        pre.textContent = 'Error: ' + e.message;
+        pre.style.backgroundColor = '#f8d7da';
+      }
     }
 
-    // Fallback: local agent flow (non-Safari and Force SSO unchecked)
-    const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
-    document.getElementById('statusRequestURL').textContent = url;
+    // ---------- Return handling after Safari SSO ----------
+    function handleReturnFromSSO() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token') || params.get('jwt') || params.get('response');
+      const urlType = params.get('type');
 
-    try {
-      const response = await fetch(url, { method: 'GET' });
-      const text = await response.text();
-      const pre = document.getElementById('statusResponse');
-      pre.textContent = text;
-      pre.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
-    } catch (e) {
-      const pre = document.getElementById('statusResponse');
-      pre.textContent = 'Error: ' + e.message;
-      pre.style.backgroundColor = '#f8d7da';
+      if (!token) return; // nothing to process
+
+      const viewId = sessionStorage.getItem('pendingViewId') || 'authentication';
+      const typeHint = sessionStorage.getItem('pendingType') || urlType || (
+        window.location.pathname.toLowerCase().includes('reg') ? 'registration' :
+        window.location.pathname.toLowerCase().includes('status') ? 'status' :
+        'authentication'
+      );
+
+      // restore originating tab
+      switchView(viewId);
+
+      if (typeHint === 'registration') {
+        document.getElementById('regResponseString').textContent = token;
+        document.getElementById('regDecodedResponse').textContent = decodeJWTIfPossible(token);
+      } else if (typeHint === 'authentication') {
+        document.getElementById('authResponseString').textContent = token;
+        document.getElementById('authDecodedResponse').textContent = decodeJWTIfPossible(token);
+      } else {
+        const pre = document.getElementById('statusResponse');
+        pre.textContent = token + '\n\n---\n\n' + decodeJWTIfPossible(token);
+      }
+
+      // clean URL & session markers
+      sessionStorage.removeItem('pendingSSO');
+      sessionStorage.removeItem('pendingType');
+      sessionStorage.removeItem('pendingViewId');
+      sessionStorage.removeItem('pending_ts');
+
+      const cleanURL = window.location.origin + window.location.pathname;
+      history.replaceState({}, document.title, cleanURL);
     }
-  }
-</script>
-
   </script>
 </body>
 </html>
