@@ -174,6 +174,16 @@
     }
 
     function debugBanner(msg) {
+  // Append to sessionStorage log
+  const key = "ssoDebugLog";
+  const existing = JSON.parse(sessionStorage.getItem(key) || "[]");
+  existing.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+  sessionStorage.setItem(key, JSON.stringify(existing));
+
+  renderDebugBanner(existing);
+}
+
+function renderDebugBanner(messages) {
   let b = document.getElementById('sso-debug');
   if (!b) {
     b = document.createElement('div');
@@ -192,14 +202,22 @@
       font:12px/1.4 system-ui;
       cursor:pointer;
     `;
-    b.title = "Click to hide debug log";
-    b.onclick = () => b.remove();  // click anywhere on it to remove
+    b.title = "Click to clear debug log";
+    b.onclick = () => {
+      sessionStorage.removeItem("ssoDebugLog");
+      b.remove();
+    };
     document.body.appendChild(b);
   }
-  const p = document.createElement('div');
-  p.textContent = msg;
-  b.appendChild(p);
+  b.innerHTML = messages.map(m => `<div>${m}</div>`).join("");
 }
+
+// On load, replay stored messages
+document.addEventListener('DOMContentLoaded', () => {
+  const stored = JSON.parse(sessionStorage.getItem("ssoDebugLog") || "[]");
+  if (stored.length > 0) renderDebugBanner(stored);
+});
+
 
 
     // =======================
