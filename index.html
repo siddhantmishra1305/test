@@ -3,18 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <title>JWT Registration, Authentication & Status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
+    :root { --muted:#555; --ok:#d4edda; --err:#f8d7da; }
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }
+    nav button { margin-right: 10px; padding:10px 14px; }
     .view { display: none; }
     .active { display: block; }
-    textarea, input { width: 100%; margin: 10px 0; }
-    textarea { height: 100px; }
-    pre { background: #eee; padding: 10px; white-space: pre-wrap; word-wrap: break-word; border-radius: 5px; }
-    button { padding: 10px 20px; margin-top: 10px; }
-    nav button { margin-right: 10px; }
-    .port-container { margin: 15px 0; }
-    .port-container label { font-size: 14px; font-weight: bold; margin-right: 8px; }
-    .hint { color:#555; font-size:12px; margin-top:4px; }
+    textarea, input[type="text"], input[type="number"] { width: 100%; margin: 8px 0 12px; }
+    textarea { height: 110px; }
+    pre { background: #eee; padding: 10px; white-space: pre-wrap; word-wrap: break-word; border-radius: 6px; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .row { margin: 14px 0; }
+    .ok { background: var(--ok); }
+    .err { background: var(--err); }
+    .port { margin: 16px 0; }
+    .port label { font-weight: 600; margin-right: 8px; }
   </style>
 </head>
 <body>
@@ -25,95 +29,127 @@
   </nav>
 
   <p class="hint">
-    Safari → redirects to apps.pingone.com (invokes SSO/ISO extension) and returns here with a response.<br/>
+    Safari → redirects to <code>apps.pingone.com</code> (invokes SSO/ISO extension) and returns here with a response.<br/>
     Other browsers → use local agent at <code>http://127.0.0.1:{port}</code>.
   </p>
 
-  <div class="port-container">
+  <div class="port">
     <label for="customPort">Backend Port:</label>
     <input type="number" id="customPort" min="1" max="65535" value="9410" />
     <button onclick="applyPort()">Apply</button>
-    <span id="portStatus" style="margin-left: 10px; color: #555;"></span>
+    <span id="portStatus" class="hint" style="margin-left:8px;"></span>
   </div>
 
-  <div id="registration" class="view active">
+  <!-- Registration -->
+  <div id="registration" class="view active" aria-hidden="false">
     <h2>Registration</h2>
-    <label>Header (JSON):</label>
-    <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-    <label>Body (JSON):</label>
-    <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
+    <div class="row">
+      <label>Header (JSON):</label>
+      <textarea id="regHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
+      <label>Body (JSON):</label>
+      <textarea id="regBody">{ "user": "alice", "action": "register" }</textarea>
+    </div>
 
-    <label>Request JWT String:</label>
-    <pre id="regRequestString">...</pre>
-    <label>Decoded Request JWT:</label>
-    <pre id="regDecodedRequest">...</pre>
+    <div class="row">
+      <label>Request JWT String:</label>
+      <pre id="regRequestString">...</pre>
+      <label>Decoded Request JWT:</label>
+      <pre id="regDecodedRequest">...</pre>
+    </div>
 
-    <label>Response JWT String:</label>
-    <pre id="regResponseString">...</pre>
-    <label>Decoded Response JWT:</label>
-    <pre id="regDecodedResponse">...</pre>
+    <div class="row">
+      <label>Response JWT String:</label>
+      <pre id="regResponseString">...</pre>
+      <label>Decoded Response JWT:</label>
+      <pre id="regDecodedResponse">...</pre>
+    </div>
 
-    <label>Path (local agent only):</label>
-    <input type="text" id="regPath" value="/register" />
+    <div class="row">
+      <label>Path (local agent only):</label>
+      <input type="text" id="regPath" value="/register" />
+    </div>
+
     <button onclick="sendJWT('registration')">Send Registration</button>
   </div>
 
-  <div id="authentication" class="view">
+  <!-- Authentication -->
+  <div id="authentication" class="view" aria-hidden="true">
     <h2>Authentication</h2>
-    <label>Header (JSON):</label>
-    <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
-    <label>Body (JSON):</label>
-    <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
+    <div class="row">
+      <label>Header (JSON):</label>
+      <textarea id="authHeader">{ "alg": "HS256", "typ": "JWT" }</textarea>
+      <label>Body (JSON):</label>
+      <textarea id="authBody">{ "user": "alice", "action": "authenticate" }</textarea>
+    </div>
 
-    <label>Request JWT String:</label>
-    <pre id="authRequestString">...</pre>
-    <label>Decoded Request JWT:</label>
-    <pre id="authDecodedRequest">...</pre>
+    <div class="row">
+      <label>Request JWT String:</label>
+      <pre id="authRequestString">...</pre>
+      <label>Decoded Request JWT:</label>
+      <pre id="authDecodedRequest">...</pre>
+    </div>
 
-    <label>Response JWT String:</label>
-    <pre id="authResponseString">...</pre>
-    <label>Decoded Response JWT:</label>
-    <pre id="authDecodedResponse">...</pre>
+    <div class="row">
+      <label>Response JWT String:</label>
+      <pre id="authResponseString">...</pre>
+      <label>Decoded Response JWT:</label>
+      <pre id="authDecodedResponse">...</pre>
+    </div>
 
-    <label>Path (local agent only):</label>
-    <input type="text" id="authPath" value="/authenticate" />
+    <div class="row">
+      <label>Path (local agent only):</label>
+      <input type="text" id="authPath" value="/authenticate" />
+    </div>
+
     <button onclick="sendJWT('authentication')">Send Authentication</button>
   </div>
 
-  <div id="statusView" class="view">
+  <!-- Status -->
+  <div id="statusView" class="view" aria-hidden="true">
     <h2>Status Check</h2>
-    <label>RP ID:</label>
-    <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
-    <label>Environment ID:</label>
-    <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
+    <div class="row">
+      <label>RP ID:</label>
+      <input type="text" id="statusRpid" value="apps.test-one-pingone.com" />
+      <label>Environment ID:</label>
+      <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
+    </div>
 
-    <label>Full Request URL:</label>
-    <pre id="statusRequestURL">...</pre>
+    <div class="row">
+      <label>Full Request URL:</label>
+      <pre id="statusRequestURL">...</pre>
+    </div>
 
-    <label>Response:</label>
-    <pre id="statusResponse">...</pre>
+    <div class="row">
+      <label>Response:</label>
+      <pre id="statusResponse">...</pre>
+    </div>
 
     <button onclick="sendStatusRequest()">Send Status Request</button>
   </div>
 
   <script>
-    // ---------- Config ----------
+    // =======================
+    // Config
+    // =======================
     const SSO_BASE = 'https://apps.pingone.com/pingid/desktop';
 
-    // ---------- State / Port ----------
+    // =======================
+    // Port / init
+    // =======================
     let backendPort = 9410;
     function applyPort() {
-      const portInput = document.getElementById('customPort');
-      let portVal = parseInt(portInput.value, 10);
-      if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
-        document.getElementById('portStatus').textContent = 'Invalid port. Must be 1-65535.';
-        document.getElementById('portStatus').style.color = '#b71c1c';
-        portInput.value = backendPort; // revert
+      const el = document.getElementById('customPort');
+      const v = parseInt(el.value, 10);
+      const ps = document.getElementById('portStatus');
+      if (Number.isNaN(v) || v < 1 || v > 65535) {
+        ps.textContent = 'Invalid port. Must be 1-65535.';
+        ps.style.color = '#b71c1c';
+        el.value = backendPort;
         return;
       }
-      backendPort = portVal;
-      document.getElementById('portStatus').textContent = `Port set to ${backendPort}`;
-      document.getElementById('portStatus').style.color = '#155724';
+      backendPort = v;
+      ps.textContent = `Port set to ${backendPort}`;
+      ps.style.color = '#155724';
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -122,21 +158,37 @@
       document.getElementById('portStatus').style.color = '#155724';
       handleReturnFromSSO();
     });
-    window.addEventListener('pageshow', (e) => { if (e.persisted) handleReturnFromSSO(); }); // Safari bfcache
+    // Safari BFCache: when user returns via back/forward restore
+    window.addEventListener('pageshow', (e) => { if (e.persisted) handleReturnFromSSO(); });
 
-    // ---------- Utilities ----------
+    // =======================
+    // UI helpers
+    // =======================
     function switchView(viewId) {
       document.querySelectorAll('.view').forEach(div => {
         div.classList.remove('active');
         div.setAttribute('aria-hidden', 'true');
       });
-      const target = document.getElementById(viewId);
-      if (target) {
-        target.classList.add('active');
-        target.setAttribute('aria-hidden', 'false');
-      }
+      const t = document.getElementById(viewId);
+      if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
     }
 
+    function debugBanner(msg) {
+      let b = document.getElementById('sso-debug');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'sso-debug';
+        b.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#fff7cc;border:1px solid #e6c200;padding:10px 12px;border-radius:8px;max-width:70vw;z-index:99999;font:12px/1.4 system-ui';
+        document.body.appendChild(b);
+      }
+      const p = document.createElement('div');
+      p.textContent = msg;
+      b.appendChild(p);
+    }
+
+    // =======================
+    // JWT helpers
+    // =======================
     function base64url(input) {
       return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
@@ -159,8 +211,7 @@
     }
 
     function currentReturnUrl() {
-      // Same page, no query
-      return window.location.origin + window.location.pathname;
+      return window.location.origin + window.location.pathname; // same page, no query
     }
 
     function submitTopLevelForm(action, fields, method = 'POST') {
@@ -179,8 +230,11 @@
       form.submit();
     }
 
-    // Persist context → Safari redirect
+    // =======================
+    // SSO: Safari redirect
+    // =======================
     function doSafariSSORedirect(type, payload) {
+      // Save context to restore correct tab & mapping on return
       sessionStorage.setItem('pendingSSO', '1');
       sessionStorage.setItem('pendingType', type);
       sessionStorage.setItem('pendingViewId',
@@ -215,15 +269,15 @@
       }
     }
 
-    // ---------- Actions ----------
+    // =======================
+    // Send actions
+    // =======================
     async function sendJWT(type) {
       const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerEl = document.getElementById(`${prefix}Header`);
       const bodyEl = document.getElementById(`${prefix}Body`);
-      const reqEl = document.getElementById(`${prefix}RequestString`);
-      const decReqEl = document.getElementById(`${prefix}DecodedRequest`);
-      const resEl = document.getElementById(`${prefix}ResponseString`);
-      const decResEl = document.getElementById(`${prefix}DecodedResponse`);
+      const reqEl = document.getElementById(`${prefix}RequestString`), decReqEl = document.getElementById(`${prefix}DecodedRequest`);
+      const resEl = document.getElementById(`${prefix}ResponseString`), decResEl = document.getElementById(`${prefix}DecodedResponse`);
       const path = document.getElementById(`${prefix}Path`).value;
 
       try {
@@ -240,27 +294,24 @@
         decReqEl.textContent = decodeJWTIfPossible(jwt);
 
         if (isSafari()) {
+          debugBanner(`Safari: redirecting to apps.pingone.com for ${type}`);
           doSafariSSORedirect(type, jwt);
           return;
         }
 
         // Non-Safari → local agent
         const url = `http://127.0.0.1:${backendPort}${path}`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: jwt
-        });
-        const text = await response.text();
+        const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: jwt });
+        const text = await resp.text();
         resEl.textContent = text;
         decResEl.textContent = decodeJWTIfPossible(text);
-        decResEl.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+        decResEl.className = resp.ok ? 'ok' : 'err';
       } catch (e) {
         reqEl.textContent = 'Error: ' + e.message;
         decReqEl.textContent = '';
         resEl.textContent = '';
         decResEl.textContent = 'Error: ' + e.message;
-        decResEl.style.backgroundColor = '#f8d7da';
+        decResEl.className = 'err';
       }
     }
 
@@ -269,6 +320,7 @@
       const environmentId = document.getElementById('statusEnvId').value.trim();
 
       if (isSafari()) {
+        debugBanner('Safari: redirecting to apps.pingone.com for status');
         doSafariSSORedirect('status', { rpid, environmentId });
         return;
       }
@@ -277,40 +329,48 @@
       document.getElementById('statusRequestURL').textContent = url;
 
       try {
-        const response = await fetch(url, { method: 'GET' });
-        const text = await response.text();
+        const resp = await fetch(url, { method: 'GET' });
+        const text = await resp.text();
         const pre = document.getElementById('statusResponse');
         pre.textContent = text;
-        pre.style.backgroundColor = response.ok ? '#d4edda' : '#f8d7da';
+        pre.className = resp.ok ? 'ok' : 'err';
       } catch (e) {
         const pre = document.getElementById('statusResponse');
         pre.textContent = 'Error: ' + e.message;
-        pre.style.backgroundColor = '#f8d7da';
+        pre.className = 'err';
       }
     }
 
-    // ---------- Return handling (query + hash) ----------
+    // =======================
+    // Return handling
+    // =======================
     function getSSOResponseFromLocation() {
-      const out = { token: null, type: null };
+      const out = { token: null, type: null, where: null };
       const qs = new URLSearchParams(window.location.search);
       out.token = qs.get('token') || qs.get('jwt') || qs.get('response');
       out.type  = qs.get('type');
+      if (out.token) out.where = 'query';
+
       if (!out.token && window.location.hash) {
         const hp = new URLSearchParams(window.location.hash.slice(1));
         out.token = hp.get('token') || hp.get('jwt') || hp.get('response');
         out.type  = out.type || hp.get('type');
+        if (out.token) out.where = 'hash';
       }
       return out;
     }
 
     function handleReturnFromSSO() {
-      const { token, type } = getSSOResponseFromLocation();
-      if (!token) return;
+      debugBanner(`Loaded URL → search="${location.search}" hash="${location.hash}"`);
+      const { token, type, where } = getSSOResponseFromLocation();
+      if (!token) { debugBanner('No token found in URL.'); return; }
+
+      debugBanner(`Token found in ${where}; length=${token.length}`);
 
       const viewId = sessionStorage.getItem('pendingViewId') || 'authentication';
       const typeHint = sessionStorage.getItem('pendingType') || type || (
-        window.location.pathname.toLowerCase().includes('reg') ? 'registration' :
-        window.location.pathname.toLowerCase().includes('status') ? 'status' :
+        location.pathname.toLowerCase().includes('reg') ? 'registration' :
+        location.pathname.toLowerCase().includes('status') ? 'status' :
         'authentication'
       );
 
@@ -327,12 +387,12 @@
         pre.textContent = token + '\n\n---\n\n' + decodeJWTIfPossible(token);
       }
 
+      // Clean up and prettify the address bar
       sessionStorage.removeItem('pendingSSO');
       sessionStorage.removeItem('pendingType');
       sessionStorage.removeItem('pendingViewId');
       sessionStorage.removeItem('pending_ts');
-
-      history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      history.replaceState({}, document.title, location.origin + location.pathname);
     }
   </script>
 </body>
