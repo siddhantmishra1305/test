@@ -104,13 +104,41 @@
   </div>
 
 <script>
-  // ========================================================
-  // Browser detection & view switch
-  // ========================================================
-  let backendPort = 9410;
-  document.getElementById('customPort').addEventListener('change', e => {
+(() => {
+  // =========================
+  // Config & small utilities
+  // =========================
+  const DEBUG = true;
+  const state = { backendPort: 9410, lastFlow: null }; // 'registration' | 'authentication' | 'status'
+  const sel = {
+    reg: {
+      header: 'regHeader', body: 'regBody',
+      req: 'regRequestString', reqDecoded: 'regDecodedRequest',
+      res: 'regResponseString', resDecoded: 'regDecodedResponse',
+      path: 'regPath'
+    },
+    auth: {
+      header: 'authHeader', body: 'authBody',
+      req: 'authRequestString', reqDecoded: 'authDecodedRequest',
+      res: 'authResponseString', resDecoded: 'authDecodedResponse',
+      path: 'authPath'
+    },
+    status: {
+      rpid: 'statusRpid', env: 'statusEnvId',
+      debug: 'statusRequestURL', out: 'statusResponse'
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const setText = (id, v) => { $(id).textContent = v; };
+  const dbg = (m, extra) => { if (DEBUG) try { console.debug('[jwt-demo]', m, extra ?? ''); } catch {} };
+
+  // =========================
+  // View toggles & UA checks
+  // =========================
+  $('customPort').addEventListener('change', e => {
     const v = parseInt(e.target.value, 10);
-    if (!Number.isNaN(v) && v >= 1 && v <= 65535) backendPort = v;
+    if (!Number.isNaN(v) && v >= 1 && v <= 65535) state.backendPort = v;
   });
 
   function isSafari() {
@@ -118,18 +146,18 @@
     return /^((?!chrome|android).)*safari/i.test(ua);
   }
 
-  function switchView(viewId) {
+  window.switchView = function switchView(viewId) {
     document.querySelectorAll('.view').forEach(div => {
       div.classList.remove('active');
       div.setAttribute('aria-hidden', 'true');
     });
     const t = document.getElementById(viewId);
     if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
-  }
+  };
 
-  // ========================================================
-  // Robust base64url & JWT helpers
-  // ========================================================
+  // =========================
+  // Base64url / JWT helpers
+  // =========================
   function b64urlToBytes(b64url) {
     let s = b64url.replace(/-/g, '+').replace(/_/g, '/');
     if (s.length % 4) s += '='.repeat(4 - (s.length % 4));
@@ -155,9 +183,14 @@
     const s = base64url('dummy-signature'); // placeholder signature
     return `${h}.${p}.${s}`;
   }
+
+  // Only decode if it *looks* like a JWT; otherwise return ''
   function decodeJWTIfPossible(token) {
+    if (typeof token !== 'string') return '';
+    const parts = token.split('.');
+    if (parts.length < 2) return ''; // not a JWT → don't show scary message
     try {
-      const [h, p] = token.split('.');
+      const [h, p] = parts;
       const header = JSON.parse(b64urlToUtf8(h));
       const payload = JSON.parse(b64urlToUtf8(p));
       return JSON.stringify({ header, payload }, null, 2);
@@ -165,139 +198,156 @@
       return 'Failed to decode JWT.';
     }
   }
-  function extractJwt(j) {
-    if (typeof j === 'string' && j.split('.').length >= 2) return j;
-    if (typeof j === 'string' && j.trim().startsWith('{')) {
-      try {
-        const obj = JSON.parse(j);
-        if (typeof obj.jwt === 'string') return obj.jwt;
-        if (typeof obj.token === 'string') return obj.token;
-      } catch {}
+
+  // Extract a JWT string from various shapes (JSON envelope, bytes, etc.)
+  function extractJwt(raw) {
+    if (typeof raw === 'string') {
+      if (raw.split('.').length >= 2) return raw; // x.y[.z]
+      const t = raw.trim();
+      if (t.startsWith('{')) {
+        try {
+          const obj = JSON.parse(t);
+          if (typeof obj.jwt === 'string')   return obj.jwt;
+          if (typeof obj.token === 'string') return obj.token;
+        } catch {}
+      }
+      return '';
     }
-    if (j && typeof j === 'object') {
-      if (typeof j.jwt === 'string') return j.jwt;
-      if (typeof j.token === 'string') return j.token;
-      if (Array.isArray(j.data)) {
-        try { return new TextDecoder().decode(new Uint8Array(j.data)); } catch {}
+    if (raw instanceof ArrayBuffer || Array.isArray(raw)) {
+      const s = new TextDecoder().decode(raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw));
+      return s.split('.').length >= 2 ? s : '';
+    }
+    if (raw && typeof raw === 'object') {
+      if (typeof raw.jwt === 'string')   return raw.jwt;
+      if (typeof raw.token === 'string') return raw.token;
+      if (Array.isArray(raw.data)) {
+        const s = new TextDecoder().decode(new Uint8Array(raw.data));
+        return s.split('.').length >= 2 ? s : '';
       }
     }
     return '';
   }
 
-  // ========================================================
-  // Safari extension bridge (page -> content.js)
-  // ========================================================
-  let lastFlow = null; // "registration" | "authentication" | "status"
-
-  function sendToSafariExtension(endpointType, jwt) {
-    const id = (crypto?.randomUUID?.() ?? String(Date.now()));
-    window.postMessage({
-      type: "JWT_FROM_PAGE",   // content.js listens for this
-      endpoint: endpointType,  // register | authenticate | status
-      jwt,
-      requestId: id
-    }, window.origin);
+  // Pretty-print JSON if possible, else raw string
+  function prettyMaybeJSON(s) {
+    if (typeof s !== 'string') {
+      try { return JSON.stringify(s, null, 2); } catch { return String(s); }
+    }
+    const t = s.trim();
+    if (t.startsWith('{') || t.startsWith('[')) {
+      try { return JSON.stringify(JSON.parse(t), null, 2); } catch {}
+    }
+    return s;
   }
 
-  // ========================================================
-  // Button handlers
-  // ========================================================
-  async function sendJWT(viewType) {
+  // =========================
+  // Safari extension bridge
+  // =========================
+  function sendToSafariExtension(endpointType, jwt) {
+    const id = (crypto?.randomUUID?.() ?? String(Date.now()));
+    const payload = { type: endpointType, jwt, requestId: id };
+    // content.js listens for this and forwards to native
+    window.postMessage({ type: "JWT_FROM_PAGE", endpoint: endpointType, jwt, requestId: id }, window.origin);
+    dbg('sent to content.js', payload);
+  }
+
+  // =========================
+  // UI update helpers
+  // =========================
+  function updateResultPanels(kind, rawOrToken) {
+    // kind: 'registration'|'authentication'|'status'
+    if (kind === 'status') {
+      const token = extractJwt(rawOrToken);
+      const output = token ? token : prettyMaybeJSON(String(rawOrToken ?? ''));
+      setText(sel.status.out, output + '\n\n---\n\n' + (token ? (decodeJWTIfPossible(token) || '—') : '—'));
+      return;
+    }
+
+    const bag = kind === 'registration' ? sel.reg : sel.auth;
+    const token = extractJwt(rawOrToken);
+    setText(bag.res, token || String(rawOrToken ?? ''));
+    setText(bag.resDecoded, token ? (decodeJWTIfPossible(token) || '—') : '—');
+  }
+
+  function showRequest(prefix, jwt) {
+    const bag = prefix === 'reg' ? sel.reg : sel.auth;
+    setText(bag.req, jwt);
+    setText(bag.reqDecoded, decodeJWTIfPossible(jwt) || '—');
+  }
+
+  // =========================
+  // Button handlers (kept as globals for onclick)
+  // =========================
+  window.sendJWT = async function sendJWT(viewType) {
+    // viewType: 'registration' | 'authentication'
     const prefix = viewType === 'registration' ? 'reg' : 'auth';
     const endpointType = viewType === 'registration' ? 'register' : 'authenticate';
-
-    const headerEl  = document.getElementById(`${prefix}Header`);
-    const bodyEl    = document.getElementById(`${prefix}Body`);
-    const reqEl     = document.getElementById(`${prefix}RequestString`);
-    const decReqEl  = document.getElementById(`${prefix}DecodedRequest`);
-    const resEl     = document.getElementById(`${prefix}ResponseString`);
-    const decResEl  = document.getElementById(`${prefix}DecodedResponse`);
-    const pathEl    = document.getElementById(`${prefix}Path`);
+    const bag = prefix === 'reg' ? sel.reg : sel.auth;
 
     try {
-      const headerJSON = JSON.parse(headerEl.value);
-      const bodyJSON   = JSON.parse(bodyEl.value);
+      const headerJSON = JSON.parse($(bag.header).value);
+      const bodyJSON   = JSON.parse($(bag.body).value);
       const jwt        = makeJWT(headerJSON, bodyJSON);
 
-      reqEl.textContent    = jwt;
-      decReqEl.textContent = decodeJWTIfPossible(jwt);
+      showRequest(prefix, jwt);
 
       if (isSafari()) {
-        lastFlow = viewType;
+        state.lastFlow = viewType;
         sendToSafariExtension(endpointType, jwt);
         return;
       }
 
-      // Non-Safari → local agent (POST plain text)
-      const url  = `http://127.0.0.1:${backendPort}${pathEl.value}`;
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: jwt
-      });
+      // Non-Safari → local agent (POST text/plain)
+      const url  = `http://127.0.0.1:${state.backendPort}${$(bag.path).value}`;
+      dbg('POST → agent', { url, len: jwt.length });
+      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: jwt });
       const text = await resp.text();
-      const outToken = extractJwt(text) || text;
-      resEl.textContent    = outToken;
-      decResEl.textContent = decodeJWTIfPossible(outToken);
+      updateResultPanels(viewType, text);
     } catch (e) {
-      reqEl.textContent = 'Error: ' + e.message;
-      decReqEl.textContent = '';
+      setText((prefix === 'reg' ? sel.reg.req : sel.auth.req), 'Error: ' + e.message);
+      setText((prefix === 'reg' ? sel.reg.reqDecoded : sel.auth.reqDecoded), '');
     }
-  }
+  };
 
-  async function sendStatusRequest() {
-    const rpid = document.getElementById('statusRpid').value.trim();
-    const environmentId = document.getElementById('statusEnvId').value.trim();
+  window.sendStatusRequest = async function sendStatusRequest() {
+    const rpid = $(sel.status.rpid).value.trim();
+    const environmentId = $(sel.status.env).value.trim();
 
-    // Build a simple JWT for status
     const header = { alg: "HS256", typ: "JWT" };
     const payload = { rpid, environmentId, action: "status" };
     const jwt = makeJWT(header, payload);
 
     if (isSafari()) {
-      lastFlow = 'status';
+      state.lastFlow = 'status';
       sendToSafariExtension('status', jwt);
-      document.getElementById('statusRequestURL').textContent = "JWT: " + jwt;
+      setText(sel.status.debug, 'JWT: ' + jwt);
       return;
     }
 
     // Non-Safari → legacy GET
-    const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
-    document.getElementById('statusRequestURL').textContent = url;
-
+    const url = `http://127.0.0.1:${state.backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
+    setText(sel.status.debug, url);
     try {
       const resp = await fetch(url, { method: 'GET' });
       const text = await resp.text();
-      const outToken = extractJwt(text) || text;
-      document.getElementById('statusResponse').textContent =
-        outToken + '\n\n---\n\n' + decodeJWTIfPossible(outToken);
+      updateResultPanels('status', text);
     } catch (e) {
-      document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
+      setText(sel.status.out, 'Error: ' + e.message);
     }
-  }
+  };
 
-  // ========================================================
-  // Receive replies from content.js (extension -> page)
-  // ========================================================
+  // =========================
+  // Replies from extension
+  // =========================
   window.addEventListener('message', (e) => {
     const data = e.data;
     if (!data || data.type !== 'JWT_RESULT') return;
+    const raw = data.jwt ?? data.error ?? '';
 
-    const raw = data.jwt;
-    const jwt = extractJwt(raw);
-    const decoded = decodeJWTIfPossible(jwt);
-
-    if (lastFlow === 'registration') {
-      document.getElementById('regResponseString').textContent = jwt || String(raw || '');
-      document.getElementById('regDecodedResponse').textContent = decoded;
-    } else if (lastFlow === 'authentication') {
-      document.getElementById('authResponseString').textContent = jwt || String(raw || '');
-      document.getElementById('authDecodedResponse').textContent = decoded;
-    } else {
-      document.getElementById('statusResponse').textContent =
-        (jwt || String(raw || '')) + '\n\n---\n\n' + decoded;
-    }
+    dbg('JWT_RESULT received', { lastFlow: state.lastFlow, sample: String(raw).slice(0, 80) });
+    updateResultPanels(state.lastFlow || 'registration', raw);
   });
+})();
 </script>
 </body>
 </html>
