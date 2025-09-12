@@ -105,182 +105,159 @@
       <button onclick="startSafariSSO('status')">Safari SSO (popup)</button>
     </div>
   </div>
-
   <script>
-    const ORIGIN = "https://YOUR.DOMAIN";                 // <-- change
-    const BRIDGE_PATH = "/sso-bridge.html";               // <-- change
-    const BRIDGE_URL = ORIGIN + BRIDGE_PATH;
-    const SSO_BASE = "https://apps.pingone.com/pingid/desktop";
+  let backendPort = 9410;
+  document.getElementById('customPort').addEventListener('change', e => {
+    const v = parseInt(e.target.value, 10);
+    if (!Number.isNaN(v) && v >= 1 && v <= 65535) backendPort = v;
+  });
 
-    let backendPort = 9410;
-    document.getElementById('customPort').addEventListener('change', e => {
-      const v = parseInt(e.target.value, 10);
-      if (!Number.isNaN(v) && v >= 1 && v <= 65535) backendPort = v;
+  function isSafari() {
+    const ua = navigator.userAgent;
+    return /^((?!chrome|android).)*safari/i.test(ua);
+  }
+
+  function switchView(viewId) {
+    document.querySelectorAll('.view').forEach(div => {
+      div.classList.remove('active');
+      div.setAttribute('aria-hidden', 'true');
     });
+    const t = document.getElementById(viewId);
+    if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
+  }
 
-    function isSafari() {
-      const ua = navigator.userAgent;
-      return /^((?!chrome|android).)*safari/i.test(ua);
-    }
+  // ---- JWT helpers
+  function base64url(input) {
+    return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function makeJWT(headerObj, payloadObj) {
+    return [
+      base64url(JSON.stringify(headerObj)),
+      base64url(JSON.stringify(payloadObj)),
+      base64url('dummy-signature')
+    ].join('.');
+  }
+  function decodeJWTIfPossible(token) {
+    if (!token || token.split('.').length < 2) return 'Not a JWT or malformed token.';
+    try {
+      const [h, p] = token.split('.');
+      const header = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
+      const payload = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
+      return JSON.stringify({ header, payload }, null, 2);
+    } catch { return 'Failed to decode JWT.' }
+  }
 
-    function switchView(viewId) {
-      document.querySelectorAll('.view').forEach(div => {
-        div.classList.remove('active');
-        div.setAttribute('aria-hidden', 'true');
+  // Track which view initiated the last Safari request so we know what to update
+  let lastFlow = null; // "registration" | "authentication" | "status"
+
+  // ---- Safari extension bridge
+  function sendToSafariExtension(endpointType, jwt) {
+    const id = (crypto?.randomUUID?.() ?? String(Date.now()));
+    window.postMessage({
+      type: "JWT_FROM_PAGE",       // content.js listens for this
+      endpoint: endpointType,      // register | authenticate | status
+      jwt,
+      requestId: id
+    }, window.origin);
+  }
+
+  // ---- Registration/Authentication flow (button handlers)
+  async function sendJWT(viewType) {
+    // viewType: "registration" | "authentication"
+    const prefix = viewType === 'registration' ? 'reg' : 'auth';
+    const endpointType = viewType === 'registration' ? 'register' : 'authenticate';
+
+    const headerEl  = document.getElementById(`${prefix}Header`);
+    const bodyEl    = document.getElementById(`${prefix}Body`);
+    const reqEl     = document.getElementById(`${prefix}RequestString`);
+    const decReqEl  = document.getElementById(`${prefix}DecodedRequest`);
+    const resEl     = document.getElementById(`${prefix}ResponseString`);
+    const decResEl  = document.getElementById(`${prefix}DecodedResponse`);
+    const pathEl    = document.getElementById(`${prefix}Path`);
+
+    try {
+      const headerJSON = JSON.parse(headerEl.value);
+      const bodyJSON   = JSON.parse(bodyEl.value);
+      const jwt        = makeJWT(headerJSON, bodyJSON);
+
+      reqEl.textContent    = jwt;
+      decReqEl.textContent = decodeJWTIfPossible(jwt);
+
+      if (isSafari()) {
+        lastFlow = viewType;
+        sendToSafariExtension(endpointType, jwt);
+        return;
+      }
+
+      // Non-Safari → local agent
+      const url  = `http://127.0.0.1:${backendPort}${pathEl.value}`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: jwt
       });
-      const t = document.getElementById(viewId);
-      if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
+      const text = await resp.text();
+      resEl.textContent    = text;
+      decResEl.textContent = decodeJWTIfPossible(text);
+    } catch (e) {
+      reqEl.textContent = 'Error: ' + e.message;
+      decReqEl.textContent = '';
+    }
+  }
+
+  // ---- Status flow (button handler)
+  async function sendStatusRequest() {
+    const rpid = document.getElementById('statusRpid').value.trim();
+    const environmentId = document.getElementById('statusEnvId').value.trim();
+
+    if (isSafari()) {
+      // Build a simple JWT for status
+      const header = { alg: "HS256", typ: "JWT" };
+      const payload = { rpid, environmentId, action: "status" };
+      const jwt = makeJWT(header, payload);
+
+      lastFlow = 'status';
+      sendToSafariExtension('status', jwt);
+
+      // Optional debug preview
+      document.getElementById('statusRequestURL').textContent = "JWT: " + jwt;
+      return;
     }
 
-    // ---- JWT helpers
-    function base64url(input) {
-      return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    // Non-Safari → local agent GET (legacy path)
+    const url = `http://127.0.0.1:${backendPort}/status` +
+                `?rpid=${encodeURIComponent(rpid)}` +
+                `&environmentId=${encodeURIComponent(environmentId)}`;
+    document.getElementById('statusRequestURL').textContent = url;
+
+    try {
+      const resp = await fetch(url, { method: 'GET' });
+      const text = await resp.text();
+      document.getElementById('statusResponse').textContent = text;
+    } catch (e) {
+      document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
     }
-    function decodeJWTIfPossible(token) {
-      if (!token || token.split('.').length < 2) return 'Not a JWT or malformed token.';
-      try {
-        const [h, p] = token.split('.');
-        const header = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
-        const payload = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
-        return JSON.stringify({ header, payload }, null, 2);
-      } catch { return 'Failed to decode JWT.' }
+  }
+
+  // ---- Receive extension replies (content.js posts JWT_RESULT)
+  window.addEventListener('message', (e) => {
+    const data = e.data;
+    if (!data || data.type !== 'JWT_RESULT') return;
+
+    const jwt   = data.jwt || '';
+    const decoded = decodeJWTIfPossible(jwt);
+
+    if (lastFlow === 'registration') {
+      document.getElementById('regResponseString').textContent = jwt;
+      document.getElementById('regDecodedResponse').textContent = decoded;
+    } else if (lastFlow === 'authentication') {
+      document.getElementById('authResponseString').textContent = jwt;
+      document.getElementById('authDecodedResponse').textContent = decoded;
+    } else {
+      // status
+      document.getElementById('statusResponse').textContent = jwt + '\n\n---\n\n' + decoded;
     }
-
-    // ---- Local agent (non-Safari) flows
-    async function sendJWT(type) {
-      const prefix = type === 'registration' ? 'reg' : 'auth';
-      const headerEl = document.getElementById(`${prefix}Header`);
-      const bodyEl = document.getElementById(`${prefix}Body`);
-      const reqEl = document.getElementById(`${prefix}RequestString`);
-      const decReqEl = document.getElementById(`${prefix}DecodedRequest`);
-      const resEl = document.getElementById(`${prefix}ResponseString`);
-      const decResEl = document.getElementById(`${prefix}DecodedResponse`);
-      const path = document.getElementById(`${prefix}Path`).value;
-
-      try {
-        const headerJSON = JSON.parse(headerEl.value);
-        const bodyJSON = JSON.parse(bodyEl.value);
-        const jwt = [
-          base64url(JSON.stringify(headerJSON)),
-          base64url(JSON.stringify(bodyJSON)),
-          base64url('dummy-signature')
-        ].join('.');
-        reqEl.textContent = jwt;
-        decReqEl.textContent = decodeJWTIfPossible(jwt);
-
-        if (isSafari()) { startSafariSSO(type, jwt); return; }
-
-        // Non-Safari → local agent
-        const url = `http://127.0.0.1:${backendPort}${path}`;
-        const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: jwt });
-        const text = await resp.text();
-        resEl.textContent = text;
-        decResEl.textContent = decodeJWTIfPossible(text);
-      } catch (e) {
-        reqEl.textContent = 'Error: ' + e.message;
-        decReqEl.textContent = '';
-      }
-    }
-
-    async function sendStatusRequest() {
-      const rpid = document.getElementById('statusRpid').value.trim();
-      const environmentId = document.getElementById('statusEnvId').value.trim();
-
-      if (isSafari()) { startSafariSSO('status'); return; }
-
-      const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
-      document.getElementById('statusRequestURL').textContent = url;
-
-      try {
-        const resp = await fetch(url, { method: 'GET' });
-        const text = await resp.text();
-        document.getElementById('statusResponse').textContent = text;
-      } catch (e) {
-        document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    // ---- Safari popup bridge flow
-    function genState() {
-      const s = crypto.getRandomValues(new Uint8Array(16));
-      return Array.from(s, b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Listen for the bridge to post the token back
-    window.addEventListener('message', (evt) => {
-      if (evt.origin !== ORIGIN) return; // security
-      if (!evt.data || evt.data.type !== 'sso-result') return;
-
-      const { token, state, flowType } = evt.data;
-      const expected = sessionStorage.getItem('sso_state');
-      const viewId = sessionStorage.getItem('sso_view');
-
-      if (!expected || state !== expected) return; // ignore unexpected
-      if (viewId) switchView(viewId);
-
-      // Fill the right boxes
-      if (flowType === 'registration') {
-        document.getElementById('regResponseString').textContent = token;
-        document.getElementById('regDecodedResponse').textContent = decodeJWTIfPossible(token);
-      } else if (flowType === 'authentication') {
-        document.getElementById('authResponseString').textContent = token;
-        document.getElementById('authDecodedResponse').textContent = decodeJWTIfPossible(token);
-      } else {
-        document.getElementById('statusResponse').textContent = token + '\n\n---\n\n' + decodeJWTIfPossible(token);
-      }
-
-      // cleanup state
-      sessionStorage.removeItem('sso_state');
-      sessionStorage.removeItem('sso_view');
-    });
-
-    function startSafariSSO(type, jwtOpt) {
-      // Prepare state + remember which tab to restore
-      const state = genState();
-      sessionStorage.setItem('sso_state', state);
-      const viewId = (type === 'registration') ? 'registration' : (type === 'authentication') ? 'authentication' : 'statusView';
-      sessionStorage.setItem('sso_view', viewId);
-
-      // Open a popup we control (so it has window.opener = this page)
-      const popup = window.open("about:blank", "ssoBridge", "popup=1,width=480,height=640");
-      if (!popup) { alert("Please allow popups for this site to use Safari SSO."); return; }
-      popup.document.write("<p>Starting SSO…</p>");
-
-      const returnUrl = `${BRIDGE_URL}?state=${encodeURIComponent(state)}&type=${encodeURIComponent(type)}`;
-      const path = (type === 'registration') ? '/register'
-                 : (type === 'authentication') ? '/authenticate'
-                 : '/status';
-      const action = SSO_BASE + path;
-
-      if (type === 'registration' || type === 'authentication') {
-        // POST jwt + return URL to apps.pingone.com in the popup (top-level)
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = action;
-        form.target = popup.name;
-        const fJwt = document.createElement('input');
-        fJwt.type = 'hidden'; fJwt.name = 'jwt'; fJwt.value = jwtOpt || '';
-        const fRet = document.createElement('input');
-        fRet.type = 'hidden'; fRet.name = 'return_url'; fRet.value = returnUrl;
-        const fRet2 = document.createElement('input');
-        fRet2.type = 'hidden'; fRet2.name = 'redirect_uri'; fRet2.value = returnUrl;
-        const fType = document.createElement('input');
-        fType.type = 'hidden'; fType.name = 'type'; fType.value = type;
-        form.append(fJwt, fRet, fRet2, fType);
-        document.body.appendChild(form);
-        form.submit();
-      } else {
-        // GET status in the popup
-        const url = new URL(action);
-        url.searchParams.set('rpid', document.getElementById('statusRpid').value.trim());
-        url.searchParams.set('environmentId', document.getElementById('statusEnvId').value.trim());
-        url.searchParams.set('return_url', returnUrl);
-        url.searchParams.set('redirect_uri', returnUrl);
-        url.searchParams.set('type', type);
-        document.getElementById('statusRequestURL').textContent = url.toString();
-        popup.location = url.toString();
-      }
-    }
-  </script>
+  });
+</script>
 </body>
 </html>
