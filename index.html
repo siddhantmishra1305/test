@@ -156,9 +156,6 @@
     return `${h}.${p}.${s}`;
   }
   function decodeJWTIfPossible(token) {
-    if (!token || typeof token !== 'string' || token.split('.').length < 2) {
-      return 'Not a JWT or malformed token.';
-    }
     try {
       const [h, p] = token.split('.');
       const header = JSON.parse(b64urlToUtf8(h));
