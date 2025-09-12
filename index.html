@@ -23,8 +23,8 @@
   </nav>
 
   <p class="hint">
-    Safari → opens a popup to <code>apps.pingone.com</code> (top-level SSO) and returns the result to this page via a bridge.<br/>
-    Other browsers → local agent at <code>http://127.0.0.1:{port}</code>.
+    <b>Safari:</b> this page sends the JWT to the Safari extension.<br/>
+    <b>Other browsers:</b> local agent at <code>http://127.0.0.1:{port}</code>.
   </p>
 
   <div class="row">
@@ -55,7 +55,6 @@
 
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <button onclick="sendJWT('registration')">Send Registration</button>
-      <button onclick="startSafariSSO('registration')">Safari SSO (popup)</button>
     </div>
   </div>
 
@@ -82,7 +81,6 @@
 
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <button onclick="sendJWT('authentication')">Send Authentication</button>
-      <button onclick="startSafariSSO('authentication')">Safari SSO (popup)</button>
     </div>
   </div>
 
@@ -94,18 +92,21 @@
     <label>Environment ID:</label>
     <input type="text" id="statusEnvId" value="53bd9bbc-5246-401e-ad71-f091ec14af5f" />
 
-    <label>Full SSO Request URL (debug):</label>
+    <label>Request (debug):</label>
     <pre id="statusRequestURL">...</pre>
 
     <label>Response:</label>
     <pre id="statusResponse">...</pre>
 
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button onclick="sendStatusRequest()">Send Status (non-Safari local agent)</button>
-      <button onclick="startSafariSSO('status')">Safari SSO (popup)</button>
+      <button onclick="sendStatusRequest()">Send Status</button>
     </div>
   </div>
-  <script>
+
+<script>
+  // ========================================================
+  // Browser detection & view switch
+  // ========================================================
   let backendPort = 9410;
   document.getElementById('customPort').addEventListener('change', e => {
     const v = parseInt(e.target.value, 10);
@@ -126,44 +127,85 @@
     if (t) { t.classList.add('active'); t.setAttribute('aria-hidden', 'false'); }
   }
 
-  // ---- JWT helpers
-  function base64url(input) {
-    return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // ========================================================
+  // Robust base64url & JWT helpers
+  // ========================================================
+  function b64urlToBytes(b64url) {
+    let s = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    if (s.length % 4) s += '='.repeat(4 - (s.length % 4));
+    const bin = atob(s);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function b64urlToUtf8(b64url) {
+    return new TextDecoder().decode(b64urlToBytes(b64url));
+  }
+  function base64url(inputUtf8) {
+    const bytes = new TextEncoder().encode(inputUtf8);
+    let b64 = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)));
+    }
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
   function makeJWT(headerObj, payloadObj) {
-    return [
-      base64url(JSON.stringify(headerObj)),
-      base64url(JSON.stringify(payloadObj)),
-      base64url('dummy-signature')
-    ].join('.');
+    const h = base64url(JSON.stringify(headerObj));
+    const p = base64url(JSON.stringify(payloadObj));
+    const s = base64url('dummy-signature'); // placeholder signature
+    return `${h}.${p}.${s}`;
   }
   function decodeJWTIfPossible(token) {
-    if (!token || token.split('.').length < 2) return 'Not a JWT or malformed token.';
+    if (!token || typeof token !== 'string' || token.split('.').length < 2) {
+      return 'Not a JWT or malformed token.';
+    }
     try {
       const [h, p] = token.split('.');
-      const header = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
-      const payload = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
+      const header = JSON.parse(b64urlToUtf8(h));
+      const payload = JSON.parse(b64urlToUtf8(p));
       return JSON.stringify({ header, payload }, null, 2);
-    } catch { return 'Failed to decode JWT.' }
+    } catch {
+      return 'Failed to decode JWT.';
+    }
+  }
+  function extractJwt(j) {
+    if (typeof j === 'string' && j.split('.').length >= 2) return j;
+    if (typeof j === 'string' && j.trim().startsWith('{')) {
+      try {
+        const obj = JSON.parse(j);
+        if (typeof obj.jwt === 'string') return obj.jwt;
+        if (typeof obj.token === 'string') return obj.token;
+      } catch {}
+    }
+    if (j && typeof j === 'object') {
+      if (typeof j.jwt === 'string') return j.jwt;
+      if (typeof j.token === 'string') return j.token;
+      if (Array.isArray(j.data)) {
+        try { return new TextDecoder().decode(new Uint8Array(j.data)); } catch {}
+      }
+    }
+    return '';
   }
 
-  // Track which view initiated the last Safari request so we know what to update
+  // ========================================================
+  // Safari extension bridge (page -> content.js)
+  // ========================================================
   let lastFlow = null; // "registration" | "authentication" | "status"
 
-  // ---- Safari extension bridge
   function sendToSafariExtension(endpointType, jwt) {
     const id = (crypto?.randomUUID?.() ?? String(Date.now()));
     window.postMessage({
-      type: "JWT_FROM_PAGE",       // content.js listens for this
-      endpoint: endpointType,      // register | authenticate | status
+      type: "JWT_FROM_PAGE",   // content.js listens for this
+      endpoint: endpointType,  // register | authenticate | status
       jwt,
       requestId: id
     }, window.origin);
   }
 
-  // ---- Registration/Authentication flow (button handlers)
+  // ========================================================
+  // Button handlers
+  // ========================================================
   async function sendJWT(viewType) {
-    // viewType: "registration" | "authentication"
     const prefix = viewType === 'registration' ? 'reg' : 'auth';
     const endpointType = viewType === 'registration' ? 'register' : 'authenticate';
 
@@ -189,7 +231,7 @@
         return;
       }
 
-      // Non-Safari → local agent
+      // Non-Safari → local agent (POST plain text)
       const url  = `http://127.0.0.1:${backendPort}${pathEl.value}`;
       const resp = await fetch(url, {
         method: 'POST',
@@ -197,65 +239,66 @@
         body: jwt
       });
       const text = await resp.text();
-      resEl.textContent    = text;
-      decResEl.textContent = decodeJWTIfPossible(text);
+      const outToken = extractJwt(text) || text;
+      resEl.textContent    = outToken;
+      decResEl.textContent = decodeJWTIfPossible(outToken);
     } catch (e) {
       reqEl.textContent = 'Error: ' + e.message;
       decReqEl.textContent = '';
     }
   }
 
-  // ---- Status flow (button handler)
   async function sendStatusRequest() {
     const rpid = document.getElementById('statusRpid').value.trim();
     const environmentId = document.getElementById('statusEnvId').value.trim();
 
-    if (isSafari()) {
-      // Build a simple JWT for status
-      const header = { alg: "HS256", typ: "JWT" };
-      const payload = { rpid, environmentId, action: "status" };
-      const jwt = makeJWT(header, payload);
+    // Build a simple JWT for status
+    const header = { alg: "HS256", typ: "JWT" };
+    const payload = { rpid, environmentId, action: "status" };
+    const jwt = makeJWT(header, payload);
 
+    if (isSafari()) {
       lastFlow = 'status';
       sendToSafariExtension('status', jwt);
-
-      // Optional debug preview
       document.getElementById('statusRequestURL').textContent = "JWT: " + jwt;
       return;
     }
 
-    // Non-Safari → local agent GET (legacy path)
-    const url = `http://127.0.0.1:${backendPort}/status` +
-                `?rpid=${encodeURIComponent(rpid)}` +
-                `&environmentId=${encodeURIComponent(environmentId)}`;
+    // Non-Safari → legacy GET
+    const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(environmentId)}`;
     document.getElementById('statusRequestURL').textContent = url;
 
     try {
       const resp = await fetch(url, { method: 'GET' });
       const text = await resp.text();
-      document.getElementById('statusResponse').textContent = text;
+      const outToken = extractJwt(text) || text;
+      document.getElementById('statusResponse').textContent =
+        outToken + '\n\n---\n\n' + decodeJWTIfPossible(outToken);
     } catch (e) {
       document.getElementById('statusResponse').textContent = 'Error: ' + e.message;
     }
   }
 
-  // ---- Receive extension replies (content.js posts JWT_RESULT)
+  // ========================================================
+  // Receive replies from content.js (extension -> page)
+  // ========================================================
   window.addEventListener('message', (e) => {
     const data = e.data;
     if (!data || data.type !== 'JWT_RESULT') return;
 
-    const jwt   = data.jwt || '';
+    const raw = data.jwt;
+    const jwt = extractJwt(raw);
     const decoded = decodeJWTIfPossible(jwt);
 
     if (lastFlow === 'registration') {
-      document.getElementById('regResponseString').textContent = jwt;
+      document.getElementById('regResponseString').textContent = jwt || String(raw || '');
       document.getElementById('regDecodedResponse').textContent = decoded;
     } else if (lastFlow === 'authentication') {
-      document.getElementById('authResponseString').textContent = jwt;
+      document.getElementById('authResponseString').textContent = jwt || String(raw || '');
       document.getElementById('authDecodedResponse').textContent = decoded;
     } else {
-      // status
-      document.getElementById('statusResponse').textContent = jwt + '\n\n---\n\n' + decoded;
+      document.getElementById('statusResponse').textContent =
+        (jwt || String(raw || '')) + '\n\n---\n\n' + decoded;
     }
   });
 </script>
