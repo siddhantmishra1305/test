@@ -36,7 +36,7 @@
     <button onclick="switchView('registration')">Registration</button>
     <button onclick="switchView('authentication')">Authentication</button>
     <button onclick="switchView('status')">Status</button>
-    <span id="appVersionBadge" class="version-badge">v2.3.3</span>
+    <span id="appVersionBadge" class="version-badge">v2.3.1</span>
   </nav>
 
   <div class="force-sso-container">
@@ -101,12 +101,12 @@
     <pre id="statusRequestURL">...</pre>
     <label>Response:</label>
     <pre id="statusResponse">...</pre>
-    <div class="muted">App Version: <span id="appVersionText">v2.3.3</span></div>
+    <div class="muted">App Version: <span id="appVersionText">v2.3.1</span></div>
     <button onclick="sendStatusRequest()">Send Status Request</button>
   </div>
 
   <script>
-    const APP_VERSION = "v2.3.3"; // Hardcoded version
+    const APP_VERSION = "v2.3.1"; // Hardcoded version
 
     // Port management
     let backendPort = 9410;
@@ -191,11 +191,9 @@
       if (type === 'status') return sendStatusRequest();
 
       const forceSSO = document.getElementById('forceSSO').checked;
-      const isBrowserSafari = isSafari(); // kept for debugging if you want to log it
-
-      // 🔴 KEY CHANGE: Safari no longer forces SSO.
-      // We only use SSO when the "Force SSO" checkbox is enabled.
-      const doSSO = forceSSO;
+      const isBrowserSafari = isSafari();
+      const doSSO = false;
+      // const doSSO = isBrowserSafari || forceSSO;
 
       const prefix = type === 'registration' ? 'reg' : 'auth';
       const headerEl = document.getElementById(`${prefix}Header`);
@@ -263,7 +261,7 @@
     async function sendStatusRequest() {
       const rpid = document.getElementById('statusRpid').value.trim();
       const envId = document.getElementById('statusEnvId').value.trim();
-      const url = `https://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
+      const url = `http://127.0.0.1:${backendPort}/status?rpid=${encodeURIComponent(rpid)}&environmentId=${encodeURIComponent(envId)}`;
 
       document.getElementById('statusRequestURL').textContent = url;
 
