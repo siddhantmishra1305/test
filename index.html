@@ -173,6 +173,8 @@
 
       const forceSSO = document.getElementById('forceSSO').checked;
       const isBrowserSafari = isSafari();
+
+      // Keep SSO disabled as in your current code
       const doSSO = false;
       // const doSSO = isBrowserSafari || forceSSO;
 
@@ -183,34 +185,38 @@
       const decResEl = document.getElementById(`${prefix}DecodedResponse`);
 
       try {
-        // Build request JWT (unchanged behavior)
         const { jwt } = buildRequestJWT(`${prefix}Header`, `${prefix}Body`);
         reqEl.textContent = jwt;
         decReqEl.textContent = decodeJWT(jwt);
 
         if (doSSO) {
-          // Top-level GET navigation to invoke Redirect-type SSO
           const u = new URL(SSO_BASE + (kind === 'registration' ? PATHS.registration : PATHS.authentication));
           const state = randState();
           sessionStorage.setItem('sso_state', state);
 
-          u.searchParams.set('redirect_uri', REDIRECT_URI);    // come back to this page
-          u.searchParams.set('state', state);                  // echo back
-          u.searchParams.set(REQUEST_PARAM_NAME, jwt);         // send the JWT in query
+          u.searchParams.set('redirect_uri', REDIRECT_URI);
+          u.searchParams.set('state', state);
+          u.searchParams.set(REQUEST_PARAM_NAME, jwt);
 
-          // Top-level nav (NOT fetch/XHR)
           window.top.location.assign(u.toString());
         } else {
-          // Local agent fallback (unchanged)
+          // Local agent fallback — FIX: use HTTP so server reads proper HTTP, not TLS handshake
           const path = kind === 'registration' ? '/register' : '/authenticate';
-          const url = `https://127.0.0.1:${backendPort}${path}`;
+
+          // Prefer localhost to reduce mixed-content/security edge cases in browsers
+          const url = `http://localhost:${backendPort}${path}`;
+
           const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Connection': 'close'
+            },
             body: reqEl.textContent
           });
+
           const text = await response.text();
-          resEl.textContent = text;                 // full token, no truncation
+          resEl.textContent = text;
           decResEl.textContent = decodeJWT(text);
           decResEl.classList.toggle('ok', response.ok);
           decResEl.classList.toggle('err', !response.ok);
@@ -224,20 +230,19 @@
       }
     }
 
-    // Handle the redirect BACK from the SSO extension (prints full token)
+    // Handle redirect BACK from the SSO extension
     function handleReturn() {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token') || params.get('jwt') || params.get('id_token') || params.get('access_token');
       const state = params.get('state');
       const expected = sessionStorage.getItem('sso_state');
 
-      // Decide which pane to print into based on optional 'type' (or just print both)
       const targets = [
         { res: 'regResponseString', dec: 'regDecodedResponse' },
         { res: 'authResponseString', dec: 'authDecodedResponse' }
       ];
 
-      if (!token && !state) return; // nothing to show
+      if (!token && !state) return;
 
       const ok = state && expected && state === expected;
       targets.forEach(t => {
@@ -245,42 +250,34 @@
         const decPre = document.getElementById(t.dec);
         if (!resPre || !decPre) return;
 
-        resPre.textContent = token || '(missing token)'; // FULL token, no truncation
+        resPre.textContent = token || '(missing token)';
         decPre.textContent = token ? decodeJWT(token) : '(n/a)';
         decPre.classList.toggle('ok',  !!ok);
         decPre.classList.toggle('err', !ok);
       });
 
-      // Clean the URL so refresh doesn't re-parse
       const clean = new URL(location.href); clean.search = '';
       history.replaceState(null, '', clean);
     }
 
     async function sendStatusRequest() {
-    const rpid  = document.getElementById('statusRpid').value.trim();
-    const envId = document.getElementById('statusEnvId').value.trim();
+      const rpid  = document.getElementById('statusRpid').value.trim();
+      const envId = document.getElementById('statusEnvId').value.trim();
 
-    // Build the SSO URL for Status — MUST match your Redirect profile's URLs prefix
-    const u = new URL(SSO_BASE + PATHS.status);
+      const u = new URL(SSO_BASE + PATHS.status);
+      const state = randState();
+      sessionStorage.setItem('sso_state', state);
 
-    const state = randState();
-    sessionStorage.setItem('sso_state', state);
+      u.searchParams.set('redirect_uri', REDIRECT_URI);
+      u.searchParams.set('state', state);
+      u.searchParams.set('rpid', rpid);
+      u.searchParams.set('environmentId', envId);
 
-    // Existing params
-    u.searchParams.set('redirect_uri', REDIRECT_URI);  // come back to this page
-    u.searchParams.set('state', state);
+      const pre = document.getElementById('statusRequestURL');
+      if (pre) pre.textContent = u.toString();
 
-    // NEW params requested
-    u.searchParams.set('rpid', rpid);
-    u.searchParams.set('environmentId', envId);
-
-    // (Optional) show the exact URL we’re navigating to
-    const pre = document.getElementById('statusRequestURL');
-    if (pre) pre.textContent = u.toString();
-
-    // Top-level navigation so the Redirect-type SSO extension will run
-    window.top.location.assign(u.toString());
-  }
+      window.top.location.assign(u.toString());
+    }
   </script>
 </body>
 </html>
