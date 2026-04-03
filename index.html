@@ -206,6 +206,12 @@
           // Prefer localhost to reduce mixed-content/security edge cases in browsers
           const url = `http://localhost:${backendPort}${path}`;
 
+          fetch("https://example.com", {
+          headers: {
+              Authorization: "Bearer test-value"
+            }
+         })     
+          
           const response = await fetch(url, {
             method: 'POST',
             headers: {
